@@ -1,0 +1,7 @@
+aiogram
+fastapi
+uvicorn
+supabase
+python-dotenv
+python-multipart
+aiohttp
