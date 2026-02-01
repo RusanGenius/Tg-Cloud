@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tg Cloud</title>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- BLOCKED SCREEN -->
+    <div id="blocked-screen" class="blocked-screen" style="display: none;">
+        <i class="fas fa-lock lock-icon"></i>
+        <h2>Доступ запрещен</h2>
+        <p>Ваш аккаунт заблокирован администратором.</p>
+    </div>
+
+    <!-- APP HEADER -->
+    <div class="app-header">
+        <div class="app-title" id="header-title">
+            <i class="fas fa-cloud"></i> Tg Cloud
+        </div>
+        <div class="settings-btn" onclick="openSettings()">
+            <i class="fas fa-cog"></i>
+        </div>
+    </div>
+
+    <!-- SELECTION HEADER (Hidden by default) -->
+    <div class="app-header selection-header" id="selection-header" style="display: none;">
+        <div class="cancel-btn" onclick="exitSelectionMode()">
+            <span data-i18n="btn_cancel">Отмена</span>
+        </div>
+        <div class="selection-count" id="selection-count">0</div>
+        <div class="selection-actions">
+            <i class="fas fa-share-alt" onclick="bulkShare()"></i>
+            <i class="fas fa-folder-open" onclick="bulkMove()"></i>
+            <i class="fas fa-trash" onclick="bulkDelete()"></i>
+        </div>
+    </div>
+
+    <!-- TOP NAVIGATION (Inside folders) -->
+    <div class="top-nav" id="top-nav" style="display: none;">
+        <div class="breadcrumbs" onclick="goBack()">
+            <i class="fas fa-chevron-left"></i> <span data-i18n="back">Назад</span>
+        </div>
+        <div class="nav-action-btn" onclick="downloadAllInFolder()">
+            <span data-i18n="save_all">Сохр. всё</span> <i class="fas fa-download"></i>
+        </div>
+    </div>
+
+    <!-- ADMIN MODE INDICATOR -->
+    <div id="admin-indicator" class="admin-indicator" style="display: none;" onclick="exitAdminMode()">
+        <i class="fas fa-user-secret"></i> Режим просмотра
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div style="position: relative; min-height: 100vh;">
+        <!-- File Grid -->
+        <div class="grid" id="file-grid"></div>
+        
+        <!-- Loader (Spinner) -->
+        <div id="loading-overlay" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <!-- ЭКРАН НАСТРОЕК -->
+    <div id="settings-view" class="settings-view" style="display: none;">
+        <div class="settings-header">
+            <h2 data-i18n="settings_title">Настройки</h2>
+            <div class="close-settings" onclick="closeSettings()">
+                <i class="fas fa-times"></i>
+            </div>
+        </div>
+
+        <div class="settings-content">
+            <div class="profile-card">
+                <div class="profile-avatar" id="profile-avatar" onclick="handleAvatarClick()">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="profile-info">
+                    <h3 id="profile-name">Загрузка...</h3>
+                    <p id="profile-username">@...</p>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <i class="fas fa-image" style="color: #34c759;"></i>
+                    <span id="stat-photos">0</span>
+                    <small data-i18n="stat_photos">Фото</small>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-video" style="color: #007aff;"></i>
+                    <span id="stat-videos">0</span>
+                    <small data-i18n="stat_videos">Видео</small>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-file-alt" style="color: #ff9f0a;"></i>
+                    <span id="stat-docs">0</span>
+                    <small data-i18n="stat_files">Файлы</small>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-folder" style="color: #ffd60a;"></i>
+                    <span id="stat-folders">0</span>
+                    <small data-i18n="stat_folders">Папки</small>
+                </div>
+            </div>
+
+            <!-- Storage Section -->
+            <div class="storage-section">
+                <div class="storage-labels">
+                    <span><span data-i18n="used">Использовано</span>: <b id="storage-used">0 MB</b></span>
+                    <span><span data-i18n="unlimited">Безлимитно</span> ∞</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 2%;"></div>
+                </div>
+            </div>
+
+            <!-- DONATE SECTION -->
+            <div class="donate-card">
+                <div class="donate-header">
+                    <i class="fas fa-star donate-star-glow"></i>
+                    <span class="donate-title-text" data-i18n="donate_title">Поддержка автора</span>
+                </div>
+                <div class="donate-grid">
+                    <div class="donate-btn" onclick="actionDonate(15)">
+                        <span class="d-amount">15</span> <i class="fas fa-star d-icon"></i>
+                    </div>
+                    <div class="donate-btn popular" onclick="actionDonate(50)">
+                        <span class="d-amount">50</span> <i class="fas fa-star d-icon"></i>
+                    </div>
+                    <div class="donate-btn" onclick="actionDonate(100)">
+                        <span class="d-amount">100</span> <i class="fas fa-star d-icon"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings List -->
+            <div class="settings-list">
+                <!-- 1. Grid Size -->
+                <div class="setting-row">
+                    <div class="setting-label">
+                        <i class="fas fa-th"></i> <span data-i18n="grid_size">Сетка</span>
+                    </div>
+                    <div class="segmented-control three-options" id="grid-switch">
+                        <div class="segmented-option" onclick="setGridSize(2)" data-val="2">2</div>
+                        <div class="segmented-option" onclick="setGridSize(3)" data-val="3">3</div>
+                        <div class="segmented-option" onclick="setGridSize(4)" data-val="4">4</div>
+                        <div class="segmented-glider" id="grid-glider"></div>
+                    </div>
+                </div>
+
+                <!-- 2. Sorting -->
+                <div class="setting-row">
+                    <div class="setting-label">
+                        <i class="fas fa-sort-amount-down"></i> <span data-i18n="sort">Сортировка</span>
+                    </div>
+                    <div class="segmented-control three-options" id="sort-switch">
+                        <div class="segmented-option" onclick="setSort('date')" data-val="date"><i class="far fa-clock"></i></div>
+                        <div class="segmented-option" onclick="setSort('name')" data-val="name">A-Z</div>
+                        <div class="segmented-option" onclick="setSort('size')" data-val="size"><i class="fas fa-weight-hanging"></i></div>
+                        <div class="segmented-glider" id="sort-glider"></div>
+                    </div>
+                </div>
+
+                <!-- 3. Theme -->
+                <div class="setting-row">
+                    <div class="setting-label">
+                        <i class="fas fa-adjust"></i> <span data-i18n="theme">Тема</span>
+                    </div>
+                    <div class="segmented-control" id="theme-switch">
+                        <div class="segmented-option" onclick="setTheme('dark')" data-val="dark" data-i18n="theme_dark">Тёмная</div>
+                        <div class="segmented-option" onclick="setTheme('light')" data-val="light" data-i18n="theme_light">Светлая</div>
+                        <div class="segmented-glider" id="theme-glider"></div>
+                    </div>
+                </div>
+                
+                <!-- 4. Language -->
+                <div class="setting-row">
+                    <div class="setting-label">
+                        <i class="fas fa-globe"></i> <span data-i18n="language">Язык</span>
+                    </div>
+                    <div class="segmented-control" id="lang-switch">
+                        <div class="segmented-option" onclick="changeLanguage('ru')" data-val="ru">RU</div>
+                        <div class="segmented-option" onclick="changeLanguage('en')" data-val="en">EN</div>
+                        <div class="segmented-glider" id="lang-glider"></div>
+                    </div>
+                </div>
+
+                <!-- 5. Delete All -->
+                <div class="setting-row danger" onclick="confirmDeleteAll()">
+                    <div class="setting-label">
+                        <i class="fas fa-trash-alt"></i> <span data-i18n="delete_all">Удалить все данные</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; color: var(--text-secondary); margin-top: 30px; font-size: 12px;">
+                Tg Cloud v3.0
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ADMIN PANEL -->
+    <div id="modal-admin" class="modal-overlay">
+        <div class="modal-box glass-box" style="max-width: 350px; height: 70vh; display: flex; flex-direction: column;">
+            <h3>Admin Panel</h3>
+            <div id="admin-user-list" style="flex: 1; overflow-y: auto; margin-top: 10px;">
+                Загрузка...
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-sec" onclick="closeModals()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTEXT MENU -->
+    <div id="context-menu" class="context-menu" style="display: none;">
+        <div class="context-item" onclick="actionInfo()">
+            <i class="fas fa-info-circle"></i> <span data-i18n="action_info">Инфо</span>
+        </div>
+        <div class="context-item" onclick="actionShare()">
+            <i class="fas fa-share-alt"></i> <span data-i18n="action_share">Поделиться</span>
+        </div>
+        <div class="context-item" onclick="actionMove()">
+            <i class="fas fa-folder-open"></i> <span data-i18n="action_move">В папку</span>
+        </div>
+        <div class="context-item" onclick="actionRenamePrompt()">
+            <i class="fas fa-edit"></i> <span data-i18n="action_rename">Переименовать</span>
+        </div>
+        
+        <div class="context-item" id="btn-remove-from-folder" onclick="actionRemoveFromFolder()" style="display: none; color: #ff9f0a;">
+            <i class="fas fa-folder-minus"></i> <span data-i18n="action_remove">Убрать</span>
+        </div>
+        
+        <!-- Regular delete button -->
+        <div class="context-item delete" onclick="confirmDelete(false)">
+            <i class="fas fa-trash"></i> <span data-i18n="action_delete">Удалить</span>
+        </div>
+        
+        <!-- Recursive delete button -->
+        <div class="context-item delete" id="btn-delete-recursive" onclick="confirmDelete(true)" style="display: none;">
+            <i class="fas fa-trash-alt"></i> <span data-i18n="action_delete_rec">С файлами</span>
+        </div>
+    </div>
+    <div id="menu-overlay" class="menu-overlay" onclick="closeContextMenu()" style="display: none;"></div>
+
+    <!-- MODAL: INFO -->
+    <div id="modal-info" class="modal-overlay">
+        <div class="modal-box glass-box">
+            <h3 data-i18n="file_info">Свойства</h3>
+            <table class="info-table">
+                <tr>
+                    <td class="info-label" data-i18n="info_name">Имя</td>
+                    <td class="info-value" id="info-name"></td>
+                </tr>
+                <tr>
+                    <td class="info-label" data-i18n="info_type">Тип</td>
+                    <td class="info-value" id="info-type"></td>
+                </tr>
+                <tr>
+                    <td class="info-label" data-i18n="info_size">Размер</td>
+                    <td class="info-value" id="info-size"></td>
+                </tr>
+                <tr>
+                    <td class="info-label" data-i18n="info_date">Дата</td>
+                    <td class="info-value" id="info-date"></td>
+                </tr>
+            </table>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="closeModals()" data-i18n="btn_close">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: TEXT INPUT (Create Folder / Rename) -->
+    <div id="modal-prompt" class="modal-overlay">
+        <div class="modal-box glass-box">
+            <h3 id="prompt-title">...</h3>
+            <input type="text" class="modal-input" id="prompt-input" autocomplete="off">
+            <div class="modal-buttons">
+                <button class="btn btn-sec" onclick="closeModals()" data-i18n="btn_cancel">Отмена</button>
+                <button class="btn btn-primary" id="prompt-submit-btn" data-i18n="btn_ok">ОК</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CONFIRMATION (Deletion) -->
+    <div id="modal-confirm" class="modal-overlay">
+        <div class="modal-box glass-box">
+            <h3 id="confirm-title" data-i18n="confirm_title">Подтверждение</h3>
+            <p id="confirm-text" style="margin: 10px 0; font-size: 14px; color: var(--text-secondary);">...</p>
+            <div class="modal-buttons">
+                <button class="btn btn-sec" onclick="closeModals()" data-i18n="btn_cancel">Отмена</button>
+                <button class="btn btn-danger" id="confirm-submit-btn" data-i18n="btn_delete">Удалить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SELECT FOLDER (Move) -->
+    <div id="modal-select-folder" class="modal-overlay">
+        <div class="modal-box glass-box">
+            <h3 data-i18n="modal_move_to">Переместить в...</h3>
+            <div class="modal-list" id="folder-list">Загрузка...</div>
+            <div class="modal-buttons">
+                <button class="btn btn-sec" onclick="closeModals()" data-i18n="btn_cancel">Отмена</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Сообщение</div>
+
+    <!-- FAB: ADD BUTTON -->
+    <div class="fab-add" id="fab-add" onclick="openCreateFolderModal()">
+        <i class="fas fa-plus"></i>
+    </div>
+
+    <!-- BOTTOM NAVIGATION BAR -->
+    <div class="bottom-bar">
+        <i class="nav-item fas fa-home active" onclick="setTab('all', this)"></i> 
+        <i class="nav-item fas fa-image" onclick="setTab('image', this)"></i>
+        <i class="nav-item fas fa-video" onclick="setTab('video', this)"></i>
+        <i class="nav-item fas fa-file-alt" onclick="setTab('doc', this)"></i>
+        <i class="nav-item fas fa-folder" onclick="setTab('folders', this)"></i>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
