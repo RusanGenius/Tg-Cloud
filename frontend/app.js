@@ -118,6 +118,10 @@ let currentState = {
     isSelectionMode: false,
     contextItem: null 
 };
+
+// --- APP INITIALIZATION STATE ---
+let isFirstLoad = true;
+
 setTheme(currentTheme); setGridSize(currentGrid); setSort(currentSort); updateLanguage();
 
 function updateHeaderTitle() {
@@ -347,6 +351,51 @@ async function deleteUserAdmin(targetId) {
 }
 
 
+// --- LOADING FUNCTIONS ---
+function showInitialLoading() {
+    document.getElementById('file-grid').classList.add('blurred');
+    document.getElementById('initial-loading-overlay').style.display = 'flex';
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('blocked-screen').style.display = 'none';
+    
+    // Запускаем прогресс-бар
+    const progressBar = document.getElementById('initial-progress-bar');
+    const progressFill = document.getElementById('initial-progress-fill');
+    
+    if(progressBar && progressFill) {
+        progressBar.style.display = 'block';
+        progressFill.style.transition = 'width 50s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        progressFill.style.width = '100%';
+    }
+}
+
+function showTabLoading() {
+    document.getElementById('file-grid').classList.add('blurred');
+    document.getElementById('loading-overlay').style.display = 'flex';
+    document.getElementById('initial-loading-overlay').style.display = 'none';
+    document.getElementById('blocked-screen').style.display = 'none';
+}
+
+function hideLoading() {
+    document.getElementById('file-grid').classList.remove('blurred');
+    
+    if(document.getElementById('blocked-screen').style.display !== 'flex') {
+        document.getElementById('loading-overlay').style.display = 'none';
+        document.getElementById('initial-loading-overlay').style.display = 'none';
+        
+        // Останавливаем и скрываем прогресс-бар
+        const progressFill = document.getElementById('initial-progress-fill');
+        const progressBar = document.getElementById('initial-progress-bar');
+        
+        if(progressFill && progressBar) {
+            progressFill.style.transition = 'none';
+            progressFill.style.width = '0%';
+            progressBar.style.display = 'none';
+        }
+    }
+}
+
+
 // --- CORE DATA & RENDERING LOGIC ---
 function setTab(name, el) {
     document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
@@ -356,9 +405,12 @@ function setTab(name, el) {
 }
 
 async function loadData() {
-    document.getElementById('file-grid').classList.add('blurred');
-    document.getElementById('loading-overlay').style.display='flex';
-    document.getElementById('blocked-screen').style.display = 'none';
+    // Показываем соответствующий тип загрузки
+    if (isFirstLoad) {
+        showInitialLoading();
+    } else {
+        showTabLoading();
+    }
 
     try {
         let url = `${API_URL}/api/files?user_id=${USER_ID}`;
@@ -368,7 +420,7 @@ async function loadData() {
         const res = await fetch(url);
         
         if(res.status === 403) {
-            document.getElementById('loading-overlay').style.display='none';
+            hideLoading();
             document.getElementById('blocked-screen').style.display = 'flex';
             return;
         }
@@ -377,9 +429,10 @@ async function loadData() {
         renderGrid();
     } catch(e){ console.error(e); } 
     finally { 
-        document.getElementById('file-grid').classList.remove('blurred'); 
-        if(document.getElementById('blocked-screen').style.display !== 'flex') {
-            document.getElementById('loading-overlay').style.display='none'; 
+        hideLoading();
+        // После первой загрузки сбрасываем флаг
+        if (isFirstLoad) {
+            isFirstLoad = false;
         }
     }
 }
