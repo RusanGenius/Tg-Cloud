@@ -365,13 +365,14 @@ function showInitialLoading() {
     if(progressBar && progressFill) {
         progressBar.style.display = 'block';
         progressFill.style.transition = 'width 50s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-        progressFill.style.width = '100%';
+        progressFill.style.width = '95%'; // До 95% чтобы никогда не доходить до конца
     }
 }
 
 function showTabLoading() {
     document.getElementById('file-grid').classList.add('blurred');
-    document.getElementById('loading-overlay').style.display = 'flex';
+    // Убираем показ loading-overlay с круглой анимацией
+    document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('initial-loading-overlay').style.display = 'none';
     document.getElementById('blocked-screen').style.display = 'none';
 }
