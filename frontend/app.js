@@ -267,7 +267,9 @@ function handleAvatarClick() {
 async function openAdminPanel() {
     document.getElementById('modal-admin').style.display = 'flex';
     const list = document.getElementById('admin-user-list');
+    const countElement = document.getElementById('admin-user-count');
     list.innerHTML = 'Загрузка...';
+    countElement.textContent = '(0)';
     
     try {
         const res = await fetch(`${API_URL}/api/admin/users`, {
@@ -279,6 +281,11 @@ async function openAdminPanel() {
         if (res.status !== 200) throw new Error();
         
         const users = await res.json();
+        
+        // Обновляем счетчик пользователей (исключая админа)
+        const userCount = users.filter(u => u.username !== ADMIN_USERNAME).length;
+        countElement.textContent = `(${userCount})`;
+        
         list.innerHTML = '';
         
         users.forEach(u => {
@@ -335,6 +342,8 @@ async function toggleBlockUser(btn, targetId) {
         if(data.status === 'ok') {
             if(data.is_blocked) { btn.classList.add('blocked'); btn.innerHTML = '<i class="fas fa-lock"></i>'; }
             else { btn.classList.remove('blocked'); btn.innerHTML = '<i class="fas fa-unlock"></i>'; }
+            // Обновляем админ панель чтобы обновить счетчик
+            openAdminPanel();
         }
     } catch(e) { showToast("Ошибка"); }
 }
@@ -346,6 +355,7 @@ async function deleteUserAdmin(targetId) {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({admin_id: REAL_USER_ID, target_user_id: targetId})
         });
+        // Обновляем админ панель чтобы обновить счетчик
         openAdminPanel();
     } catch(e) { showToast("Ошибка"); }
 }
