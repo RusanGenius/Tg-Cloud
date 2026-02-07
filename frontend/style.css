@@ -549,9 +549,9 @@ body {
 .profile-info h3 { margin: 0; font-size: 18px; }
 .profile-info p { margin: 5px 0 0; color: var(--text-secondary); font-size: 14px; }
 
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0px; margin-bottom: 20px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0px; margin: 0 20px 20px 20px; }
 .stat-item { text-align: center; display: flex; flex-direction: column; gap: 5px; }
-.stat-item span { font-weight: 700; color: var(--text-primary); }
+.stat-item span { font-weight: 700; color: var(--text-primary); font-size: 24px; }
 .stat-item small { color: var(--text-secondary); font-size: 13px; }
 
 .storage-labels { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; color: var(--text-secondary); }
