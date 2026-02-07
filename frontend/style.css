@@ -551,7 +551,7 @@ body {
 
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0px; margin: 0 20px 20px 20px; }
 .stat-item { text-align: center; display: flex; flex-direction: column; gap: 5px; }
-.stat-item span { font-weight: 700; color: var(--text-primary); font-size: 24px; }
+.stat-item span { font-weight: 700; color: var(--text-primary); font-size: 20px; }
 .stat-item small { color: var(--text-secondary); font-size: 13px; }
 
 .storage-labels { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; color: var(--text-secondary); }
