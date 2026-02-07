@@ -719,12 +719,15 @@ body {
 
 
 /* --- SHADOWS FOR SETTINGS (LIGHT THEME) --- */
-[data-theme="light"] .profile-card,
 [data-theme="light"] .storage-section,
 [data-theme="light"] .setting-row,
 [data-theme="light"] .stat-item {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     border-color: rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .profile-avatar {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 /* --- SELECTION MODE STYLES --- */
