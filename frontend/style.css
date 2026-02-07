@@ -515,8 +515,21 @@ body {
     background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary);
     border-radius: 15px; margin-bottom: 15px; padding: 15px;
 }
-.profile-card { display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px; }
-.profile-avatar { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(45deg, #007aff, #5ac8fa); display: flex; align-items: center; justify-content: center; font-size: 24px; color: white; }
+.profile-card { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+.profile-avatar { 
+    width: 60px; 
+    height: 60px; 
+    border-radius: 50%; 
+    background: var(--glass-bg); 
+    border: 1px solid var(--glass-border); 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-size: 24px; 
+    color: var(--text-primary); 
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
 .profile-info h3 { margin: 0; font-size: 18px; }
 .profile-info p { margin: 5px 0 0; color: var(--text-secondary); font-size: 14px; }
 
