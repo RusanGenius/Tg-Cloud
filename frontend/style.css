@@ -1,7 +1,7 @@
 :root {
     /* --- DARK THEME --- */
-    --bg-color: linear-gradient(to bottom, #0d1a26, #000000);
-    --glass-bg: rgba(30, 30, 30, 0.6); 
+    --bg-color: linear-gradient(to bottom, #0f202e, #000000);
+    --glass-bg: rgba(30, 30, 30, 0.4); 
     --glass-border: rgba(255, 255, 255, 0.1);
     --accent: #ffffff; 
     --text-primary: #ffffff;
@@ -10,7 +10,7 @@
     --nav-bg: rgba(20, 20, 20, 0.6);
     --modal-bg: rgba(21, 21, 21, 0.6);
     --modal-border: rgba(255, 255, 255, 0.1);
-    --input-bg: rgba(120, 120, 128, 0.2);
+    --input-bg: rgba(120, 120, 128, 0.1);
     --glider-bg: #141414;
     --save-bg: rgba(47, 128, 41, 0.6);
     --name-bg: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
@@ -493,9 +493,16 @@ body {
 .nav-item.active { color: var(--accent); transform: scale(1.1); }
 .fab-add { 
     position: fixed; bottom: 95px; right: 20px; width: 50px; height: 50px; 
-    background: var(--accent); color: var(--bg-color);
+    background: var(--accent);
     border-radius: 50%; display: flex; align-items: center; justify-content: center; 
-    font-size: 24px; box-shadow: 0 5px 20px rgba(255, 255, 255, 0.2); z-index: 90; display: none; 
+    font-size: 24px; z-index: 90; display: none;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+}
+:root .fab-add {
+    color: #000;
+}
+[data-theme="light"] .fab-add {
+    color: #fff;
 }
 
 /* --- SETTINGS SCREEN --- */
