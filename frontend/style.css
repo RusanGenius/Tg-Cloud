@@ -515,7 +515,13 @@ body {
     background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary);
     border-radius: 15px; margin-bottom: 15px; padding: 15px;
 }
-.profile-card { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+.profile-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
 .profile-avatar { 
     width: 60px; 
     height: 60px; 
@@ -530,11 +536,14 @@ body {
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
 }
+.profile-info {
+    text-align: center;
+}
 .profile-info h3 { margin: 0; font-size: 18px; }
 .profile-info p { margin: 5px 0 0; color: var(--text-secondary); font-size: 14px; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-.stat-item { background: var(--glass-bg); border: 1px solid var(--glass-border); padding: 15px 5px; border-radius: 15px; text-align: center; display: flex; flex-direction: column; gap: 5px; }
+.stat-item { text-align: center; display: flex; flex-direction: column; gap: 5px; }
 .stat-item span { font-weight: 700; color: var(--text-primary); }
 .stat-item small { color: var(--text-secondary); font-size: 10px; }
 
@@ -720,8 +729,7 @@ body {
 
 /* --- SHADOWS FOR SETTINGS (LIGHT THEME) --- */
 [data-theme="light"] .storage-section,
-[data-theme="light"] .setting-row,
-[data-theme="light"] .stat-item {
+[data-theme="light"] .setting-row {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     border-color: rgba(255, 255, 255, 0.8);
 }
