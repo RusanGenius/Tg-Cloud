@@ -374,7 +374,7 @@ function showInitialLoading() {
     
     if(progressBar && progressFill) {
         progressBar.style.display = 'block';
-        progressFill.style.transition = 'width 50s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        progressFill.style.transition = 'width 40s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
         progressFill.style.width = '95%'; // До 95% чтобы никогда не доходить до конца
     }
 }
