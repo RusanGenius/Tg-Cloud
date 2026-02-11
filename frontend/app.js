@@ -598,7 +598,7 @@ function updateUI() {
     updateHeaderTitle();
 }
 function openFolder(id, name) { currentState.folderId=id; currentState.folderName=name; updateUI(); loadData(); }
-function goBack() { currentState.folderId=null; currentState.folderName=null; updateUI(); loadData(); }
+function goBack() { currentState.folderId=null; currentState.folderName=null; updateUI(); renderGrid(); }
 
 async function downloadFile(item, el) {
     if(el) { 
@@ -896,6 +896,13 @@ async function processBulkMove(targetFolderId) {
     exitSelectionMode();
     fullReload();
 }
+
+// Auto-refresh when app becomes visible to sync external changes (e.g., files sent to bot)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        fullReload(false); // false = don't show the big initial loader
+    }
+});
 
 setTab('all', document.querySelector('.nav-item'));
 fullReload();
