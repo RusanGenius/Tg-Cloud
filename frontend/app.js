@@ -91,7 +91,7 @@ function updateLanguage() {
 }
 function changeLanguage(lang) {
     currentLang = lang; localStorage.setItem('tg_cloud_lang', lang);
-    updateLanguage(); loadData();
+    updateLanguage(); renderGrid();
 }
 
 function setTheme(theme) {
@@ -457,21 +457,6 @@ async function fullReload(showLoader = true) {
     }
 }
 
-async function loadData() {
-    // This function is now ONLY for loading content inside a folder.
-    if (!currentState.folderId) return;
-
-    showTabLoading();
-    try {
-        let url = `${API_URL}/api/files?user_id=${USER_ID}&folder_id=${currentState.folderId}&mode=strict`;
-        const res = await fetch(url);
-        if (res.status === 403) { hideLoading(); document.getElementById('blocked-screen').style.display = 'flex'; return; }
-        currentState.cache = await res.json();
-        renderGrid();
-    } catch (e) { console.error(e); }
-    finally { hideLoading(); }
-}
-
 function renderGrid() {
     const grid = document.getElementById('file-grid');
     grid.innerHTML = ''; 
@@ -486,8 +471,10 @@ function renderGrid() {
 
     // FILTERING LOGIC START
     if (currentState.folderId) {
-        // When inside a folder, `loadData` populates `currentState.cache`.
-        items = currentState.cache;
+        // When inside a folder, filter the global caches.
+        const folderContentFiles = allFilesCache.filter(i => i.parent_id === currentState.folderId);
+        const folderContentFolders = allFoldersCache.filter(i => i.parent_id === currentState.folderId);
+        items = [...folderContentFolders, ...folderContentFiles];
     } else {
         // Top level tabs, use the new global caches.
         switch (currentState.tab) {
@@ -597,7 +584,7 @@ function updateUI() {
     document.getElementById('fab-add').style.display = (currentState.tab==='folders') ? 'flex' : 'none';
     updateHeaderTitle();
 }
-function openFolder(id, name) { currentState.folderId=id; currentState.folderName=name; updateUI(); loadData(); }
+function openFolder(id, name) { currentState.folderId=id; currentState.folderName=name; updateUI(); renderGrid(); }
 function goBack() { currentState.folderId=null; currentState.folderName=null; updateUI(); renderGrid(); }
 
 async function downloadFile(item, el) {
@@ -627,7 +614,8 @@ async function downloadFile(item, el) {
 }
 async function downloadAllInFolder() {
     if (!currentState.folderId) return;
-    const items = currentState.cache.filter(i=>i.type!=='folder');
+    // Get items for the current folder from the global cache
+    const items = allFilesCache.filter(i => i.parent_id === currentState.folderId);
     for(let i=0; i<items.length; i++) { setTimeout(()=>downloadFile(items[i], document.getElementById(`item-${items[i].id}`)), i*300); }
 }
 
@@ -705,9 +693,12 @@ async function actionRemoveFromFolder() {
 
 async function actionMove() {
     const item = currentState.contextItem; closeContextMenu();
-    const modal = document.getElementById('modal-select-folder'); const list = document.getElementById('folder-list');
-    modal.style.display = 'flex'; list.innerHTML = t('loading');
-    const res = await fetch(`${API_URL}/api/files?user_id=${USER_ID}&mode=folders`); const folders = await res.json();
+    const modal = document.getElementById('modal-select-folder'); 
+    const list = document.getElementById('folder-list');
+    modal.style.display = 'flex'; 
+    list.innerHTML = t('loading');
+    // Use cached folders
+    const folders = allFoldersCache;
     list.innerHTML = '';
     
     const div = document.createElement('div'); div.className = 'modal-item'; div.innerHTML = `<i class="fas fa-plus"></i> <b>${t('modal_new_folder')}</b>`;
@@ -823,10 +814,12 @@ function bulkDelete() {
     openConfirm(t('confirm_title'), `${t('bulk_del_confirm')} (${count})`, async () => {
         tg.MainButton.showProgress();
         const ids = Array.from(currentState.selectedFiles);
+        // Find items from cache to determine their type
+        const allItems = [...allFilesCache, ...allFoldersCache];
         
         // Execute sequentially to avoid rate limits or overwhelming backend
         for (const id of ids) {
-             const item = currentState.cache.find(i => i.id === id);
+             const item = allItems.find(i => i.id === id);
              if (!item) continue;
              
              let url = `${API_URL}/api/delete`;
@@ -853,8 +846,8 @@ async function bulkMove() {
     list.innerHTML = t('loading');
     
     // Get Folders
-    const res = await fetch(`${API_URL}/api/files?user_id=${USER_ID}&mode=folders`); 
-    const folders = await res.json();
+    // Use cached folders
+    const folders = allFoldersCache;
     list.innerHTML = '';
 
     // Create New Folder option
