@@ -715,6 +715,11 @@ body {
     margin-bottom: 5px;
 }
 
+[data-theme="light"] .loading-animation {
+    filter: invert(1);
+    mix-blend-mode: multiply;
+}
+
 .loading-text {
     color: var(--text-primary); 
     font-size: 16px; 

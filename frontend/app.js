@@ -15,6 +15,9 @@ let currentTheme = localStorage.getItem('tg_cloud_theme') || 'dark';
 let currentGrid = parseInt(localStorage.getItem('tg_cloud_grid') || '3');
 let currentSort = localStorage.getItem('tg_cloud_sort') || 'date';
 
+let allFilesCache = [];
+let allFoldersCache = [];
+
 // --- LOCALIZATION ---
 const translations = {
     ru: {
@@ -251,7 +254,7 @@ async function openSettings() {
 function closeSettings() { document.getElementById('settings-view').style.display = 'none'; }
 function confirmDeleteAll() {
     openConfirm(t('delete_all'), t('confirm_msg_all'), async () => {
-        try { await fetch(`${API_URL}/api/delete_all`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({user_id:USER_ID})}); closeSettings(); setTab('all'); } catch(e){}
+        try { await fetch(`${API_URL}/api/delete_all`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({user_id:USER_ID})}); closeSettings(); fullReload(); } catch(e){}
     });
 }
 
@@ -320,14 +323,14 @@ function impersonateUser(targetId) {
     document.getElementById('admin-indicator').style.display = 'flex';
     closeModals();
     closeSettings();
-    setTab('all');
+    fullReload();
     showToast(`Вошли как ID: ${targetId}`);
 }
 
 function exitAdminMode() {
     USER_ID = REAL_USER_ID;
     document.getElementById('admin-indicator').style.display = 'none';
-    setTab('all');
+    fullReload();
     showToast("Возврат в свой аккаунт");
 }
 
@@ -414,43 +417,59 @@ function hideLoading() {
 
 // --- CORE DATA & RENDERING LOGIC ---
 function setTab(name, el) {
-    document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
-    if(el) el.classList.add('active');
-    currentState.tab=name; currentState.folderId=null; currentState.folderName=null;
-    updateUI(); loadData();
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    if (el) el.classList.add('active');
+    currentState.tab = name; currentState.folderId = null; currentState.folderName = null;
+    updateUI();
+    renderGrid(); // Render immediately from cache
 }
 
-async function loadData() {
-    // Показываем соответствующий тип загрузки
+async function fullReload(showLoader = true) {
     if (isFirstLoad) {
         showInitialLoading();
-    } else {
-        showTabLoading();
+    } else if (showLoader) {
+        showTabLoading(); // Or some other indicator
     }
 
     try {
-        let url = `${API_URL}/api/files?user_id=${USER_ID}`;
-        if(currentState.tab==='folders') url+=currentState.folderId ? `&folder_id=${currentState.folderId}&mode=strict` : `&folder_id=null&mode=strict`;
-        else url+=`&mode=global`;
-        
-        const res = await fetch(url);
-        
-        if(res.status === 403) {
+        const [filesRes, foldersRes] = await Promise.all([
+            fetch(`${API_URL}/api/files?user_id=${USER_ID}&mode=global`),
+            fetch(`${API_URL}/api/files?user_id=${USER_ID}&mode=folders`)
+        ]);
+
+        if (filesRes.status === 403 || foldersRes.status === 403) {
             hideLoading();
             document.getElementById('blocked-screen').style.display = 'flex';
             return;
         }
 
-        currentState.cache = await res.json();
-        renderGrid();
-    } catch(e){ console.error(e); } 
-    finally { 
+        allFilesCache = await filesRes.json();
+        allFoldersCache = await foldersRes.json();
+
+        renderGrid(); // Re-render the current view with new data
+    } catch (e) {
+        console.error(e);
+    } finally {
         hideLoading();
-        // После первой загрузки сбрасываем флаг
         if (isFirstLoad) {
             isFirstLoad = false;
         }
     }
+}
+
+async function loadData() {
+    // This function is now ONLY for loading content inside a folder.
+    if (!currentState.folderId) return;
+
+    showTabLoading();
+    try {
+        let url = `${API_URL}/api/files?user_id=${USER_ID}&folder_id=${currentState.folderId}&mode=strict`;
+        const res = await fetch(url);
+        if (res.status === 403) { hideLoading(); document.getElementById('blocked-screen').style.display = 'flex'; return; }
+        currentState.cache = await res.json();
+        renderGrid();
+    } catch (e) { console.error(e); }
+    finally { hideLoading(); }
 }
 
 function renderGrid() {
@@ -463,15 +482,33 @@ function renderGrid() {
     // Add selection class if active
     if(currentState.isSelectionMode) grid.classList.add('selection-mode');
 
-    let items = currentState.cache;
-    
+    let items;
+
     // FILTERING LOGIC START
-    if(!currentState.folderId) {
-        if(currentState.tab==='folders') items=items.filter(i=>i.type==='folder');
-        else if(currentState.tab==='image') items=items.filter(i=>i.name.match(/\.(jpg|jpeg|png)$/i));
-        else if(currentState.tab==='video') items=items.filter(i=>i.name.match(/\.(mp4|mov)$/i));
-        else if(currentState.tab==='doc') items=items.filter(i=>i.type==='file' && !i.name.match(/\.(jpg|png|mp4)$/i));
-        else items=items.filter(i=>i.type!=='folder');
+    if (currentState.folderId) {
+        // When inside a folder, `loadData` populates `currentState.cache`.
+        items = currentState.cache;
+    } else {
+        // Top level tabs, use the new global caches.
+        switch (currentState.tab) {
+            case 'folders':
+                // Show only top-level folders.
+                items = allFoldersCache.filter(f => f.parent_id === null);
+                break;
+            case 'image':
+                items = allFilesCache.filter(i => i.name.match(/\.(jpg|jpeg|png)$/i));
+                break;
+            case 'video':
+                items = allFilesCache.filter(i => i.name.match(/\.(mp4|mov)$/i));
+                break;
+            case 'doc':
+                items = allFilesCache.filter(i => i.type === 'file' && !i.name.match(/\.(jpg|jpeg|png|mp4|mov)$/i));
+                break;
+            case 'all':
+            default:
+                items = allFilesCache;
+                break;
+        }
     }
     items.sort((a,b)=>{ 
         if(currentSort==='name') return a.name.localeCompare(b.name); 
@@ -483,7 +520,7 @@ function renderGrid() {
     if(items.length === 0) { 
         if(currentState.folderId) { grid.innerHTML = `<div class="empty-pro"><i class="far fa-folder-open"></i><p>${t('empty_folder_content')}</p></div>`; return; }
         if(currentState.tab === 'folders') { grid.innerHTML = `<div class="empty-pro"><i class="fas fa-folder-open"></i><p>${t('empty_folders')}</p></div>`; return; }
-        if (items.length === 0 && currentState.cache.length === 0) { /* Welcome screen code */ }
+        if (items.length === 0 && allFilesCache.length === 0 && allFoldersCache.length === 0) { /* Welcome screen code */ }
         grid.innerHTML = `<div class="empty-pro"><i class="fas fa-inbox"></i><p>${t('empty_all')}</p></div>`;
         return; 
     }
@@ -643,8 +680,8 @@ function actionRenamePrompt() {
             const ext = '.' + oldName.split('.').pop();
             if(!val.endsWith(ext)) val += ext;
         }
-        await fetch(`${API_URL}/api/rename`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({item_id:item.id, new_name:val})});
-        loadData();
+        await fetch(`${API_URL}/api/rename`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_id: item.id, new_name: val }) });
+        fullReload();
     });
 }
 
@@ -655,15 +692,15 @@ function confirmDelete(recursive) {
     
     openConfirm(t('confirm_title'), t(msgKey), async () => {
         const url = recursive ? `${API_URL}/api/delete_folder_recursive` : `${API_URL}/api/delete`;
-        await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({item_id:item.id})});
-        loadData();
+        await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item_id: item.id }) });
+        fullReload();
     });
 }
 
 async function actionRemoveFromFolder() {
     const item = currentState.contextItem; closeContextMenu();
-    await fetch(`${API_URL}/api/move_file`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({file_id:item.id, folder_id:null})});
-    loadData();
+    await fetch(`${API_URL}/api/move_file`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: item.id, folder_id: null }) });
+    fullReload();
 }
 
 async function actionMove() {
@@ -690,15 +727,15 @@ async function actionMove() {
 }
 async function moveFileAPI(fileId, folderId) {
     closeModals(); tg.MainButton.showProgress();
-    await fetch(`${API_URL}/api/move_file`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({file_id:fileId, folder_id:folderId})});
-    tg.MainButton.hideProgress(); loadData();
+    await fetch(`${API_URL}/api/move_file`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: fileId, folder_id: folderId }) });
+    tg.MainButton.hideProgress(); fullReload();
 }
 
 function openCreateFolderModal(cb) {
     openPrompt(t('modal_new_folder'), t('prompt_folder_name'), async (val) => {
-        await fetch(`${API_URL}/api/create_folder`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({user_id:USER_ID, name:val, parent_id:currentState.folderId})});
-        if(cb) {}
-        loadData();
+        await fetch(`${API_URL}/api/create_folder`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: USER_ID, name: val, parent_id: currentState.folderId }) });
+        if (cb) { }
+        fullReload();
     });
 }
 
@@ -805,7 +842,7 @@ function bulkDelete() {
         tg.MainButton.hideProgress();
         showToast(`${t('bulk_deleted')}: ${count}`);
         exitSelectionMode();
-        loadData();
+        fullReload();
     });
 }
 
@@ -857,7 +894,8 @@ async function processBulkMove(targetFolderId) {
     tg.MainButton.hideProgress();
     showToast(`${t('bulk_moved')}: ${ids.length}`);
     exitSelectionMode();
-    loadData();
+    fullReload();
 }
 
 setTab('all', document.querySelector('.nav-item'));
+fullReload();
