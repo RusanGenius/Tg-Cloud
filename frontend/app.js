@@ -361,27 +361,33 @@ async function deleteUserAdmin(targetId) {
 }
 
 
-// --- LOADING FUNCTIONS ---
+// --- LOADING FUNCTIONS & TIMERS ---
+let loadingTimer;
+
 function showInitialLoading() {
     document.getElementById('file-grid').classList.add('blurred');
     document.getElementById('initial-loading-overlay').style.display = 'flex';
     document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('blocked-screen').style.display = 'none';
     
-    // Запускаем прогресс-бар
     const progressBar = document.getElementById('initial-progress-bar');
     const progressFill = document.getElementById('initial-progress-fill');
     
     if(progressBar && progressFill) {
         progressBar.style.display = 'block';
-        progressFill.style.transition = 'width 40s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-        progressFill.style.width = '95%'; // До 95% чтобы никогда не доходить до конца
+        // Сбрасываем и запускаем анимацию
+        progressFill.style.transition = 'none';
+        progressFill.style.width = '0%';
+        // Небольшая задержка, чтобы браузер успел применить сброс
+        setTimeout(() => {
+            progressFill.style.transition = 'width 40s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+            progressFill.style.width = '95%'; // До 95%, чтобы никогда не доходить до конца
+        }, 50);
     }
 }
 
 function showTabLoading() {
     document.getElementById('file-grid').classList.add('blurred');
-    // Убираем показ loading-overlay с круглой анимацией
     document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('initial-loading-overlay').style.display = 'none';
     document.getElementById('blocked-screen').style.display = 'none';
@@ -389,21 +395,20 @@ function showTabLoading() {
 
 function hideLoading() {
     document.getElementById('file-grid').classList.remove('blurred');
-    
-    if(document.getElementById('blocked-screen').style.display !== 'flex') {
-        document.getElementById('loading-overlay').style.display = 'none';
-        document.getElementById('initial-loading-overlay').style.display = 'none';
-        
-        // Останавливаем и скрываем прогресс-бар
-        const progressFill = document.getElementById('initial-progress-fill');
-        const progressBar = document.getElementById('initial-progress-bar');
-        
-        if(progressFill && progressBar) {
-            progressFill.style.transition = 'none';
-            progressFill.style.width = '0%';
-            progressBar.style.display = 'none';
-        }
+    const progressFill = document.getElementById('initial-progress-fill');
+    if (progressFill) {
+        // Ускоряем завершение анимации
+        progressFill.style.transition = 'width 0.3s ease-out';
+        progressFill.style.width = '100%';
     }
+
+    // Скрываем оверлей после короткой анимации завершения
+    setTimeout(() => {
+        if (document.getElementById('blocked-screen').style.display !== 'flex') {
+            document.getElementById('loading-overlay').style.display = 'none';
+            document.getElementById('initial-loading-overlay').style.display = 'none';
+        }
+    }, 300);
 }
 
 
