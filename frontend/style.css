@@ -236,9 +236,9 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 40px;
-    color: rgba(255, 255, 255, 0.8);
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    font-size: 30px; /* Базовый размер для сетки 4x */
+    color: rgba(255, 255, 255, 0.7);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
     z-index: 3;
     pointer-events: none;
 }
@@ -261,13 +261,15 @@ body {
 /* Grid 3 */
 .grid.cols-3 .folder-icon, 
 .grid.cols-3 .file-icon, 
-.grid.cols-3 .icon-video { font-size: 40px; }
+.grid.cols-3 .icon-video,
+.grid.cols-3 .video-overlay { font-size: 40px; }
 .grid.cols-3 .item .menu-btn { font-size: 18px; padding: 10px; }
 
 /* Grid 2 */
 .grid.cols-2 .folder-icon, 
 .grid.cols-2 .file-icon, 
-.grid.cols-2 .icon-video { font-size: 55px; }
+.grid.cols-2 .icon-video,
+.grid.cols-2 .video-overlay { font-size: 55px; }
 .grid.cols-2 .item .menu-btn { font-size: 22px; padding: 12px; }
 
 
