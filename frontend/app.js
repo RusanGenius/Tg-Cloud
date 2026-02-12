@@ -376,7 +376,11 @@ async function deleteUserAdmin(targetId) {
 let loadingTimer;
 
 function showInitialLoading() {
-    document.getElementById('file-grid').classList.add('blurred');
+    const blurOverlay = document.getElementById('gradual-blur-overlay');
+    if (blurOverlay) {
+        blurOverlay.style.display = 'block';
+        setTimeout(() => blurOverlay.style.opacity = '1', 10);
+    }
     document.getElementById('initial-loading-overlay').style.display = 'flex';
     document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('blocked-screen').style.display = 'none';
@@ -398,21 +402,28 @@ function showInitialLoading() {
 }
 
 function showTabLoading() {
-    document.getElementById('file-grid').classList.add('blurred');
+    const blurOverlay = document.getElementById('gradual-blur-overlay');
+    if (blurOverlay) {
+        blurOverlay.style.display = 'block';
+        setTimeout(() => blurOverlay.style.opacity = '1', 10);
+    }
     document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('initial-loading-overlay').style.display = 'none';
     document.getElementById('blocked-screen').style.display = 'none';
 }
 
 function hideLoading() {
-    document.getElementById('file-grid').classList.remove('blurred');
+    const blurOverlay = document.getElementById('gradual-blur-overlay');
+    if (blurOverlay) {
+        blurOverlay.style.opacity = '0';
+        setTimeout(() => blurOverlay.style.display = 'none', 500); // Hide after transition
+    }
     const progressFill = document.getElementById('initial-progress-fill');
     if (progressFill) {
         // Ускоряем завершение анимации
         progressFill.style.transition = 'width 0.3s ease-out';
         progressFill.style.width = '100%';
     }
-
     // Скрываем оверлей после короткой анимации завершения
     setTimeout(() => {
         if (document.getElementById('blocked-screen').style.display !== 'flex') {
