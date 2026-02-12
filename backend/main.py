@@ -258,6 +258,9 @@ async def handle_files(message: Message):
         file_size = message.video.file_size
         if message.video.thumbnail:
             thumbnail_id = message.video.thumbnail.file_id
+            print(f"Found thumbnail for video. ID: {thumbnail_id}")
+        else:
+            print("No thumbnail found for video.")
 
     if file_id:
         try:
