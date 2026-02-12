@@ -284,9 +284,16 @@ async def handle_files(message: Message):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-    yield
-    await bot.delete_webhook()
+    if WEBHOOK_URL:
+        await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+        print(f"--> Webhook set to {WEBHOOK_URL}/webhook")
+        yield
+        await bot.delete_webhook()
+    else:
+        print("--> WARNING: WEBHOOK_URL not set. Starting in polling mode.")
+        asyncio.create_task(dp.start_polling(bot))
+        yield
+        await bot.session.close()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -338,6 +345,7 @@ class InvoiceRequest(BaseModel):
 
 @app.post("/webhook")
 async def bot_webhook(update: dict):
+    """Endpoint to receive updates from Telegram."""
     telegram_update = Update.model_validate(update, context={"bot": bot})
     await dp.feed_update(bot=bot, update=telegram_update)
     return {"status": "ok"}
