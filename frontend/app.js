@@ -376,11 +376,7 @@ async function deleteUserAdmin(targetId) {
 let loadingTimer;
 
 function showInitialLoading() {
-    const blurOverlay = document.getElementById('gradual-blur-overlay');
-    if (blurOverlay) {
-        blurOverlay.style.display = 'block';
-        setTimeout(() => blurOverlay.style.opacity = '1', 10);
-    }
+    document.getElementById('file-grid').classList.add('blurred');
     document.getElementById('initial-loading-overlay').style.display = 'flex';
     document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('blocked-screen').style.display = 'none';
