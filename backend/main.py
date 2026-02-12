@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, LabeledPrice, PreCheckoutQuery, ContentType
+from aiogram.types import Update, Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, LabeledPrice, PreCheckoutQuery, ContentType
 from aiogram.filters import CommandStart, CommandObject
 import aiohttp 
 
@@ -20,6 +20,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") # The public URL of your Render service
 ADMIN_USERNAME = "astermaneiro"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -283,9 +284,9 @@ async def handle_files(message: Message):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    asyncio.create_task(dp.start_polling(bot))
+    await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
     yield
-    await bot.session.close()
+    await bot.delete_webhook()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -332,6 +333,14 @@ class InvoiceRequest(BaseModel):
     amount: int
     title: str = "Поддержка автора"
     description: str = "Донат на развитие проекта"
+
+# --- WEBHOOK ENDPOINT ---
+
+@app.post("/webhook")
+async def bot_webhook(update: dict):
+    telegram_update = Update.model_validate(update, context={"bot": bot})
+    await dp.feed_update(bot=bot, update=telegram_update)
+    return {"status": "ok"}
 
 # --- API ENDPOINTS: ADMIN ---
 
