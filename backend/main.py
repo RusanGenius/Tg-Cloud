@@ -242,6 +242,7 @@ async def handle_files(message: Message):
     file_id = None
     file_name = "Без названия"
     file_size = 0
+    thumbnail_id = None
 
     if message.document:
         file_id = message.document.file_id
@@ -255,6 +256,8 @@ async def handle_files(message: Message):
         file_id = message.video.file_id
         file_name = message.video.file_name or "video.mp4"
         file_size = message.video.file_size
+        if message.video.thumbnail:
+            thumbnail_id = message.video.thumbnail.file_id
 
     if file_id:
         try:
@@ -264,7 +267,8 @@ async def handle_files(message: Message):
                 "type": "file",
                 "file_id": file_id,
                 "size": file_size,
-                "parent_id": None 
+                "parent_id": None,
+                "thumbnail_id": thumbnail_id
             }
             supabase.table("items").insert(new_file).execute()
             await message.answer(f"💾 Сохранено: {file_name}")

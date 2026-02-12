@@ -526,9 +526,17 @@ function renderGrid() {
         if(item.type==='folder') {
             c=`<i class="icon fas fa-folder folder-icon"></i>`;
         } else {
-            if(item.name.match(/\.(jpg|png)$/i)) c=`<img src="${API_URL}/api/preview/${item.file_id}" class="item-preview" loading="lazy">`;
-            else if(item.name.match(/\.mp4$/i)) c=`<i class="icon fas fa-video icon-video"></i>`;
-            else c=`<i class="icon fas fa-file file-icon"></i>`;
+            if(item.name.match(/\.(jpg|png)$/i)) {
+                c=`<img src="${API_URL}/api/preview/${item.file_id}" class="item-preview" loading="lazy">`;
+            } else if(item.name.match(/\.(mp4|mov)$/i)) {
+                if (item.thumbnail_id) {
+                    c = `<img src="${API_URL}/api/preview/${item.thumbnail_id}" class="item-preview" loading="lazy"><div class="video-overlay"><i class="fas fa-play"></i></div>`;
+                } else {
+                    c = `<i class="icon fas fa-video icon-video"></i>`;
+                }
+            } else {
+                c=`<i class="icon fas fa-file file-icon"></i>`;
+            }
         }
         
         // Icon for selection mode

@@ -229,6 +229,20 @@ body {
 }
 .item-preview { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0; opacity: 0.9; transition: opacity 0.2s; }
 
+.video-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    color: rgba(255, 255, 255, 0.8);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    z-index: 3;
+    pointer-events: none;
+}
+
 .folder-icon, .file-icon, .icon-video {
     margin-bottom: auto; 
     margin-top: auto;
