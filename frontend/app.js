@@ -17,6 +17,7 @@ let currentSort = localStorage.getItem('tg_cloud_sort') || 'date';
 
 let allFilesCache = [];
 let allFoldersCache = [];
+let currentRenderedItems = []; // Cache of items currently displayed in the grid
 
 // --- LOCALIZATION ---
 const translations = {
@@ -120,6 +121,13 @@ let currentState = {
     selectedFiles: new Set(),
     isSelectionMode: false,
     contextItem: null 
+};
+
+// --- DRAG-TO-SELECT STATE ---
+const dragSelectState = {
+    isActive: false,
+    anchorEl: null, // The element where selection started
+    currentEl: null, // The element currently under the pointer
 };
 
 // --- APP INITIALIZATION STATE ---
@@ -505,12 +513,15 @@ function renderGrid() {
     // FILTERING LOGIC END
 
     if(items.length === 0) { 
+        currentRenderedItems = []; // Clear cache if grid is empty
         if(currentState.folderId) { grid.innerHTML = `<div class="empty-pro"><i class="far fa-folder-open"></i><p>${t('empty_folder_content')}</p></div>`; return; }
         if(currentState.tab === 'folders') { grid.innerHTML = `<div class="empty-pro"><i class="fas fa-folder-open"></i><p>${t('empty_folders')}</p></div>`; return; }
         if (items.length === 0 && allFilesCache.length === 0 && allFoldersCache.length === 0) { /* Welcome screen code */ }
         grid.innerHTML = `<div class="empty-pro"><i class="fas fa-inbox"></i><p>${t('empty_all')}</p></div>`;
         return; 
     }
+
+    currentRenderedItems = items; // Cache the rendered items array for drag-selection logic
 
     items.forEach(item => {
         const el=document.createElement('div'); 
@@ -569,14 +580,32 @@ function renderGrid() {
         // 2. Long Press Handler
         let pressTimer;
         el.addEventListener('touchstart', (e) => {
+            // If we are already in selection mode, a long press should do nothing.
+            // The normal 'onclick' will handle tapping to toggle.
             if (currentState.isSelectionMode) return;
-            pressTimer = setTimeout(() => {
-                enterSelectionMode(item.id);
-                if (navigator.vibrate) navigator.vibrate(10);
-            }, 600);
-        }, {passive: true});
+            
+            // Clear any previous timer
+            clearTimeout(pressTimer);
 
-        el.addEventListener('touchend', () => clearTimeout(pressTimer));
+            // Start a timer for the long press
+            pressTimer = setTimeout(() => {
+                // Long press detected
+                e.preventDefault(); // Prevent default actions like scrolling or context menu
+
+                if (navigator.vibrate) navigator.vibrate(20); // Haptic feedback
+
+                // Enter selection mode with the current item
+                enterSelectionMode(item.id);
+
+                // Initialize the drag-to-select state
+                dragSelectState.isActive = true;
+                dragSelectState.anchorEl = el;
+                dragSelectState.currentEl = el;
+
+            }, 500); // 500ms for a long press
+        }, { passive: false }); // passive: false is required for preventDefault() to work
+
+        el.addEventListener('touchend', () => clearTimeout(pressTimer)); // Clear timer if touch ends before 500ms
         el.addEventListener('touchmove', () => clearTimeout(pressTimer));
         el.addEventListener('contextmenu', (e) => {
              e.preventDefault(); // Prevent native menu on long press
@@ -770,29 +799,31 @@ function exitSelectionMode() {
     renderGrid();
 }
 
-function toggleSelection(itemId) {
-    if (currentState.selectedFiles.has(itemId)) {
-        currentState.selectedFiles.delete(itemId);
-    } else {
-        currentState.selectedFiles.add(itemId);
-    }
-    
-    if (currentState.selectedFiles.size === 0) {
-        exitSelectionMode(); // Exit if nothing selected
-    } else {
-        updateSelectionUI();
-        const el = document.getElementById(`item-${itemId}`);
-        const icon = el.querySelector('.select-indicator i');
-        if (currentState.selectedFiles.has(itemId)) {
-            el.classList.add('selected');
+function updateItemSelectionVisual(itemId, isSelected) {
+    const el = document.getElementById(`item-${itemId}`);
+    if (!el) return;
+    const icon = el.querySelector('.select-indicator i');
+    if (isSelected) {
+        el.classList.add('selected');
+        if (icon) {
             icon.classList.remove('fa-circle');
             icon.classList.add('fa-check-circle');
-        } else {
-            el.classList.remove('selected');
+        }
+    } else {
+        el.classList.remove('selected');
+        if (icon) {
             icon.classList.remove('fa-check-circle');
             icon.classList.add('fa-circle');
         }
     }
+}
+
+function toggleSelection(itemId) {
+    const isSelected = currentState.selectedFiles.has(itemId);
+    isSelected ? currentState.selectedFiles.delete(itemId) : currentState.selectedFiles.add(itemId);
+    
+    if (currentState.selectedFiles.size === 0) exitSelectionMode();
+    else { updateSelectionUI(); updateItemSelectionVisual(itemId, !isSelected); }
 }
 
 function updateSelectionUI() {
@@ -898,12 +929,101 @@ async function processBulkMove(targetFolderId) {
     fullReload();
 }
 
+// --- DRAG-TO-SELECT LOGIC ---
+
+function handleDragSelectMove(e) {
+    if (!dragSelectState.isActive) return;
+
+    // We are actively drag-selecting, so we prevent scrolling.
+    e.preventDefault();
+
+    const touch = e.touches[0];
+    const elementUnderPointer = document.elementFromPoint(touch.clientX, touch.clientY);
+    const itemEl = elementUnderPointer ? elementUnderPointer.closest('.item') : null;
+
+    // Only update if the finger moves to a new item
+    if (itemEl && itemEl !== dragSelectState.currentEl) {
+        dragSelectState.currentEl = itemEl;
+        updateDragSelection();
+    }
+}
+
+function handleDragSelectEnd(e) {
+    if (!dragSelectState.isActive) return;
+
+    // Reset drag state
+    dragSelectState.isActive = false;
+    dragSelectState.anchorEl = null;
+    dragSelectState.currentEl = null;
+    
+    // Final UI update
+    if (currentState.selectedFiles.size === 0) {
+        exitSelectionMode();
+    } else {
+        updateSelectionUI();
+    }
+}
+
+function updateDragSelection() {
+    if (!dragSelectState.anchorEl) return;
+
+    const cols = parseInt(currentGrid);
+    const anchorId = dragSelectState.anchorEl.id.replace('item-', '');
+    const currentEl = dragSelectState.currentEl || dragSelectState.anchorEl;
+    const currentId = currentEl.id.replace('item-', '');
+
+    const anchorIndex = currentRenderedItems.findIndex(i => i.id === anchorId);
+    const currentIndex = currentRenderedItems.findIndex(i => i.id === currentId);
+
+    if (anchorIndex === -1 || currentIndex === -1) return;
+
+    // Calculate row/column for anchor and current items
+    const startRow = Math.floor(anchorIndex / cols);
+    const startCol = anchorIndex % cols;
+    const currentRow = Math.floor(currentIndex / cols);
+    const currentCol = currentIndex % cols;
+
+    // Determine the bounds of the selection rectangle
+    const minRow = Math.min(startRow, currentRow);
+    const maxRow = Math.max(startRow, currentRow);
+    const minCol = Math.min(startCol, currentCol);
+    const maxCol = Math.max(startCol, currentCol);
+
+    // Get IDs of all items within the rectangle
+    const newSelectedIds = new Set();
+    for (let r = minRow; r <= maxRow; r++) {
+        for (let c = minCol; c <= maxCol; c++) {
+            const index = r * cols + c;
+            if (index < currentRenderedItems.length) {
+                newSelectedIds.add(currentRenderedItems[index].id);
+            }
+        }
+    }
+
+    // Efficiently update the selection state and visuals
+    const allIdsInView = new Set(currentRenderedItems.map(i => i.id));
+    allIdsInView.forEach(id => {
+        const shouldBeSelected = newSelectedIds.has(id);
+        const isSelected = currentState.selectedFiles.has(id);
+
+        if (shouldBeSelected && !isSelected) { currentState.selectedFiles.add(id); updateItemSelectionVisual(id, true); } 
+        else if (!shouldBeSelected && isSelected) { currentState.selectedFiles.delete(id); updateItemSelectionVisual(id, false); }
+    });
+    
+    updateSelectionUI();
+}
+
 // Auto-refresh when app becomes visible to sync external changes (e.g., files sent to bot)
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         fullReload(false); // false = don't show the big initial loader
     }
 });
+
+// Add event listeners for drag-to-select. passive:false is needed to prevent scrolling during selection.
+document.getElementById('file-grid').addEventListener('touchmove', handleDragSelectMove, { passive: false });
+document.addEventListener('touchend', handleDragSelectEnd);
+document.addEventListener('touchcancel', handleDragSelectEnd);
 
 setTab('all', document.querySelector('.nav-item'));
 fullReload();
