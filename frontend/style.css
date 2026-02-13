@@ -80,7 +80,7 @@ body {
 }
 
 .top-nav {
-    top: 56px; /* Position below main header */
+    top: 50px; /* Position below main header, reduced gap */
     justify-content: flex-start;
 }
 
@@ -92,7 +92,7 @@ body {
 .app-header > *,
 .top-nav > *,
 .settings-header > *,
-.selection-header > * {
+.selection-header .selection-header-inner {
     pointer-events: all; /* Children are clickable */
     background: var(--nav-bg);
     backdrop-filter: blur(20px);
@@ -104,10 +104,17 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-height: 42px;
+    box-sizing: border-box;
     transition: 0.3s;
 }
 
 .app-title { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;}
+.app-title > i {
+    font-size: 22px; /* Standardize icon size */
+    width: 24px;
+    text-align: center;
+}
 .settings-btn { font-size: 20px; cursor: pointer; color: var(--text-primary); }
 
 
@@ -144,6 +151,7 @@ body {
 .app-logo {
     height: 24px;
     width: auto;
+    width: 24px;
     object-fit: contain;
     margin-right: 5px;
     transition: filter 0.3s ease;
@@ -830,7 +838,12 @@ body.hide-labels .item .name {
 /* --- SELECTION MODE STYLES --- */
 
 .selection-header {
+    justify-content: center; /* Center the single island */
+}
+
+.selection-header .selection-header-inner {
     justify-content: space-between;
+    width: 90%;
 }
 
 /* Round buttons */
@@ -936,7 +949,7 @@ body.hide-labels .item .name {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 5px 5px 5px;
+    padding: 10px 5px 5px 5px; /* Reduced top padding */
     font-size: 16px;
     font-weight: 600;
     color: var(--text-secondary);
