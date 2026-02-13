@@ -111,8 +111,8 @@ body {
 
 .app-title { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;}
 .app-title > i {
-    font-size: 20px; /* Standardize icon size */
-    width: 22px;
+    font-size: 18px; /* Standardize icon size */
+    width: 18px;
     text-align: center;
 }
 .settings-btn { font-size: 20px; cursor: pointer; color: var(--text-primary); }
@@ -152,7 +152,7 @@ body {
     height: 25px;
     width: 25px;
     object-fit: contain;
-    margin-right: 5px;
+    margin-right: 2px;
     transition: filter 0.3s ease;
 }
 
