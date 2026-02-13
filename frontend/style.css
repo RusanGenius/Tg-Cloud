@@ -151,7 +151,6 @@ body {
 .app-logo {
     height: 24px;
     width: auto;
-    width: 24px;
     object-fit: contain;
     margin-right: 5px;
     transition: filter 0.3s ease;
@@ -305,14 +304,14 @@ body {
 .grid.cols-3 .folder-icon, 
 .grid.cols-3 .file-icon, 
 .grid.cols-3 .icon-video,
-.grid.cols-3 .video-overlay { font-size: 40px; }
+.grid.cols-3 .video-overlay { font-size: 34px; }
 .grid.cols-3 .item .menu-btn { font-size: 18px; padding: 10px; }
 
 /* Grid 2 */
 .grid.cols-2 .folder-icon, 
 .grid.cols-2 .file-icon, 
 .grid.cols-2 .icon-video,
-.grid.cols-2 .video-overlay { font-size: 55px; }
+.grid.cols-2 .video-overlay { font-size: 46px; }
 .grid.cols-2 .item .menu-btn { font-size: 22px; padding: 12px; }
 
 
