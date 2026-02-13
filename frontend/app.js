@@ -14,6 +14,7 @@ let currentLang = localStorage.getItem('tg_cloud_lang') || 'ru';
 let currentTheme = localStorage.getItem('tg_cloud_theme') || 'dark';
 let currentGrid = parseInt(localStorage.getItem('tg_cloud_grid') || '3');
 let currentSort = localStorage.getItem('tg_cloud_sort') || 'date';
+let showLabels = (localStorage.getItem('tg_cloud_labels') || 'true') === 'true';
 
 let allFilesCache = [];
 let allFoldersCache = [];
@@ -50,6 +51,9 @@ const translations = {
         bulk_del_confirm: "Удалить выбранные объекты?",
         bulk_deleted: "Удалено",
         bulk_moved: "Перемещено",
+        show_labels: "Надписи",
+        labels_show: "Показ",
+        labels_hide: "Скрыть",
     },
     en: {
         loading: "Loading...", empty: "Empty", back: "Back", save_all: "Save all",
@@ -80,6 +84,9 @@ const translations = {
         bulk_del_confirm: "Delete selected items?",
         bulk_deleted: "Deleted",
         bulk_moved: "Moved",
+        show_labels: "Labels",
+        labels_show: "Show",
+        labels_hide: "Hide",
     }
 };
 
@@ -104,6 +111,13 @@ function setTheme(theme) {
 
 function setGridSize(size) { currentGrid = size; localStorage.setItem('tg_cloud_grid', size); updateSlider('grid-switch', 'grid-glider', size.toString()); renderGrid(); }
 function setSort(type) { currentSort = type; localStorage.setItem('tg_cloud_sort', type); updateSlider('sort-switch', 'sort-glider', type); renderGrid(); }
+
+function setShowLabels(shouldShow) {
+    showLabels = shouldShow;
+    localStorage.setItem('tg_cloud_labels', shouldShow);
+    document.body.classList.toggle('hide-labels', !shouldShow);
+    updateSlider('labels-switch', 'labels-glider', shouldShow.toString());
+}
 
 function updateSlider(cId, gId, val) {
     const c = document.getElementById(cId); const g = document.getElementById(gId);
@@ -133,7 +147,11 @@ const dragSelectState = {
 // --- APP INITIALIZATION STATE ---
 let isFirstLoad = true;
 
-setTheme(currentTheme); setGridSize(currentGrid); setSort(currentSort); updateLanguage();
+setTheme(currentTheme);
+setGridSize(currentGrid);
+setSort(currentSort);
+updateLanguage();
+document.body.classList.toggle('hide-labels', !showLabels);
 
 function updateHeaderTitle() {
     const h = document.getElementById('header-title');
@@ -234,6 +252,7 @@ async function openSettings() {
     document.getElementById('settings-view').style.display = 'flex';
     updateSlider('theme-switch', 'theme-glider', currentTheme); updateSlider('lang-switch', 'lang-glider', currentLang);
     updateSlider('grid-switch', 'grid-glider', currentGrid.toString()); updateSlider('sort-switch', 'sort-glider', currentSort);
+    updateSlider('labels-switch', 'labels-glider', showLabels.toString());
     
     try { 
         const res = await fetch(`${API_URL}/api/profile?user_id=${USER_ID}`);

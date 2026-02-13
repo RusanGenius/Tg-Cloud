@@ -202,6 +202,18 @@
                     </div>
                 </div>
 
+                <!-- 5. Show Labels -->
+                <div class="setting-row">
+                    <div class="setting-label">
+                        <i class="fas fa-tag"></i> <span data-i18n="show_labels">Надписи</span>
+                    </div>
+                    <div class="segmented-control" id="labels-switch">
+                        <div class="segmented-option" onclick="setShowLabels(true)" data-val="true" data-i18n="labels_show">Показ</div>
+                        <div class="segmented-option" onclick="setShowLabels(false)" data-val="false" data-i18n="labels_hide">Скрыть</div>
+                        <div class="segmented-glider" id="labels-glider"></div>
+                    </div>
+                </div>
+
                 <!-- 5. Delete All -->
                 <div class="setting-row danger" onclick="confirmDeleteAll()">
                     <div class="setting-label">

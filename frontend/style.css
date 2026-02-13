@@ -309,6 +309,10 @@ body {
     text-shadow: var(--text-shadow);
 }
 
+body.hide-labels .item .name {
+    display: none;
+}
+
 [data-theme="light"] .item:not(:has(.item-preview)) .name {
     color: #000000;
     text-shadow: none;
