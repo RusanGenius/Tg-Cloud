@@ -322,7 +322,7 @@ function openSupportModal() {
 
 function setSupportType(type) {
     currentSupportType = type;
-    updateSlider('support-type-selector', document.querySelector('#support-type-selector .segmented-glider'), type);
+    updateSlider('support-type-selector', 'support-glider', type);
 }
 
 async function sendSupportMessage() {
