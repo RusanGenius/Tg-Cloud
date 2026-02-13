@@ -339,6 +339,35 @@
         </div>
     </div>
     
+    <!-- MODAL: SUPPORT -->
+    <div id="modal-support" class="modal-overlay">
+        <div class="modal-box glass-box">
+            <h3 id="support-title" data-i18n="support_title">Поддержка</h3>
+            
+            <div id="support-type-selector" class="segmented-control three-options" style="margin: 15px auto;">
+                <div class="segmented-glider"></div>
+                <div class="segmented-option active" data-val="bug" onclick="setSupportType('bug')">
+                    <span data-i18n="support_type_bug">Баг</span>
+                </div>
+                <div class="segmented-option" data-val="complaint" onclick="setSupportType('complaint')">
+                    <span data-i18n="support_type_complaint">Жалоба</span>
+                </div>
+                <div class="segmented-option" data-val="suggestion" onclick="setSupportType('suggestion')">
+                    <span data-i18n="support_type_suggestion">Предложение</span>
+                </div>
+            </div>
+    
+            <textarea id="support-input" class="modal-input" rows="5" data-i18n-placeholder="support_placeholder" placeholder="Опишите проблему или идею..."></textarea>
+            
+            <div class="modal-buttons">
+                <button class="btn btn-sec" onclick="closeModals()" data-i18n="btn_cancel">Отмена</button>
+                <button id="support-send-btn" class="btn btn-primary" onclick="sendSupportMessage()">
+                    <span data-i18n="btn_send">Отправить</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast">Сообщение</div>
 
