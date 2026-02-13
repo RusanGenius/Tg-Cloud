@@ -309,6 +309,11 @@ let currentSupportType = 'bug'; // Default support type
 
 function openSupportModal() {
     const modal = document.getElementById('modal-support');
+    if (!modal) {
+        console.error("Support modal element (#modal-support) not found in HTML.");
+        showToast("Ошибка: UI элемент не найден");
+        return;
+    }
     modal.style.display = 'flex';
     document.getElementById('support-input').value = '';
     setSupportType('bug'); // Reset to default
@@ -318,6 +323,32 @@ function openSupportModal() {
 function setSupportType(type) {
     currentSupportType = type;
     updateSlider('support-type-selector', document.querySelector('#support-type-selector .segmented-glider'), type);
+}
+
+async function sendSupportMessage() {
+    const message = document.getElementById('support-input').value.trim();
+    if (!message) return;
+
+    tg.MainButton.showProgress();
+    closeModals();
+
+    try {
+        const res = await fetch(`${API_URL}/api/support`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: REAL_USER_ID, type: currentSupportType, message: message })
+        });
+
+        if (res.ok) {
+            let toastKey = 'support_sent_bug';
+            if (currentSupportType === 'complaint') toastKey = 'support_sent_complaint';
+            else if (currentSupportType === 'suggestion') toastKey = 'support_sent_suggestion';
+            showToast(t(toastKey));
+        } else {
+            showToast('Ошибка отправки');
+        }
+    } catch (e) { console.error(e); showToast('Ошибка сети'); } 
+    finally { tg.MainButton.hideProgress(); }
 }
 
 // --- SETTINGS SCREEN ---

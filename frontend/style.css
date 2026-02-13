@@ -1,6 +1,6 @@
 :root {
     /* --- DARK THEME --- */
-    --bg-color: radial-gradient(circle at 50% 0%, rgba(128, 128, 128, 0.25) 0%, transparent 50%), #000000;
+    --bg-color: radial-gradient(circle at 50% 0%, rgba(128, 128, 128, 0.2) 0%, transparent 50%), #000000;
     --glass-bg: rgba(30, 30, 30, 0.4); 
     --glass-border: rgba(255, 255, 255, 0.1);
     --accent: #ffffff; 
