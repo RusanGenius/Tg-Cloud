@@ -51,6 +51,7 @@ const translations = {
         bulk_del_confirm: "Удалить выбранные объекты?",
         bulk_deleted: "Удалено",
         bulk_moved: "Перемещено",
+        months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
         show_labels: "Надписи",
         labels_show: "Показ",
         labels_hide: "Скрыть",
@@ -84,6 +85,7 @@ const translations = {
         bulk_del_confirm: "Delete selected items?",
         bulk_deleted: "Deleted",
         bulk_moved: "Moved",
+        months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
         show_labels: "Labels",
         labels_show: "Show",
         labels_hide: "Hide",
@@ -285,6 +287,40 @@ function confirmDeleteAll() {
     });
 }
 
+function toggleMonthSelection(year, month) {
+    const monthItems = currentRenderedItems.filter(item => {
+        if (item.type === 'folder') return false;
+        const itemDate = new Date(item.created_at);
+        return itemDate.getFullYear() === year && itemDate.getMonth() === month;
+    });
+
+    if (monthItems.length === 0) return;
+
+    const monthItemIds = monthItems.map(i => i.id);
+    const areAllSelected = monthItemIds.every(id => currentState.selectedFiles.has(id));
+
+    if (!areAllSelected) {
+        // If not all are selected, select all.
+        if (!currentState.isSelectionMode && monthItemIds.length > 0) {
+            currentState.isSelectionMode = true;
+            document.getElementById('selection-header').style.display = 'flex';
+            document.querySelector('.app-header:not(.selection-header)').style.display = 'none';
+            document.querySelector('.bottom-bar').style.display = 'none';
+            document.querySelector('.fab-add').style.display = 'none';
+        }
+        monthItemIds.forEach(id => currentState.selectedFiles.add(id));
+    } else {
+        // If all are already selected, deselect all.
+        monthItemIds.forEach(id => currentState.selectedFiles.delete(id));
+    }
+
+    if (currentState.selectedFiles.size === 0) {
+        exitSelectionMode(); // This handles UI and re-renders
+    } else {
+        updateSelectionUI();
+        renderGrid(); // Re-render to update visuals
+    }
+}
 
 // --- ADMIN PANEL LOGIC ---
 function handleAvatarClick() {
@@ -491,6 +527,98 @@ async function fullReload(showLoader = true) {
     }
 }
 
+function createItemElement(item) {
+    const el=document.createElement('div'); 
+    el.className='item'; 
+    el.id=`item-${item.id}`;
+    
+    // Selection state class
+    if (currentState.selectedFiles.has(item.id)) {
+        el.classList.add('selected');
+    }
+
+    let c='';
+    if(item.type==='folder') {
+        c=`<i class="icon fas fa-folder folder-icon"></i>`;
+    } else {
+        if(item.name.match(/\.(jpg|png)$/i)) {
+            c=`<img src="${API_URL}/api/preview/${item.file_id}" class="item-preview" loading="lazy">`;
+        } else if(item.name.match(/\.(mp4|mov)$/i)) {
+            if (item.thumbnail_id) {
+                c = `<img src="${API_URL}/api/preview/${item.thumbnail_id}" class="item-preview" loading="lazy"><div class="video-overlay"><i class="fas fa-play"></i></div>`;
+            } else {
+                c = `<i class="icon fas fa-video icon-video"></i>`;
+            }
+        } else {
+            c=`<i class="icon fas fa-file file-icon"></i>`;
+        }
+    }
+    
+    // Icon for selection mode
+    const checkIcon = currentState.selectedFiles.has(item.id) ? 'fa-check-circle' : 'fa-circle';
+    
+    el.innerHTML = `
+        ${c}
+        <div class="success-overlay"><i class="fas fa-check"></i></div>
+        <div class="select-indicator"><i class="far ${checkIcon}"></i></div>
+        <div class="name">${item.name}</div>
+        <div class="menu-btn" onclick="openContextMenu(event, '${encodeURIComponent(JSON.stringify(item))}')">
+            <i class="fas fa-ellipsis-v"></i>
+        </div>
+    `;
+
+    // CLICK & TOUCH LOGIC
+    
+    // 1. Click Handler
+    el.onclick = (e) => { 
+        if(e.target.closest('.menu-btn')) return; 
+        
+        if (currentState.isSelectionMode) {
+            toggleSelection(item.id);
+        } else {
+            if(item.type==='folder') openFolder(item.id, item.name); 
+            else downloadFile(item, el); 
+        }
+    };
+
+    // 2. Long Press Handler
+    let pressTimer;
+    el.addEventListener('touchstart', (e) => {
+        // If we are already in selection mode, a long press should do nothing.
+        // The normal 'onclick' will handle tapping to toggle.
+        if (currentState.isSelectionMode) return;
+        
+        // Clear any previous timer
+        clearTimeout(pressTimer);
+
+        // Start a timer for the long press
+        pressTimer = setTimeout(() => {
+            // Long press detected
+            e.preventDefault(); // Prevent default actions like scrolling or context menu
+
+            if (navigator.vibrate) navigator.vibrate(20); // Haptic feedback
+
+            // Enter selection mode with the current item
+            enterSelectionMode(item.id);
+
+            // Initialize the drag-to-select state
+            dragSelectState.isActive = true;
+            dragSelectState.anchorEl = el;
+            dragSelectState.currentEl = el;
+
+        }, 500); // 500ms for a long press
+    }, { passive: false }); // passive: false is required for preventDefault() to work
+
+    el.addEventListener('touchend', () => clearTimeout(pressTimer)); // Clear timer if touch ends before 500ms
+    el.addEventListener('touchmove', () => clearTimeout(pressTimer));
+    el.addEventListener('contextmenu', (e) => {
+         e.preventDefault(); // Prevent native menu on long press
+         return false;
+    });
+
+    return el;
+}
+
 function renderGrid() {
     const grid = document.getElementById('file-grid');
     grid.innerHTML = ''; 
@@ -498,22 +626,17 @@ function renderGrid() {
     grid.classList.add(`cols-${currentGrid}`);
     if(currentState.folderId) grid.classList.add('with-nav');
     
-    // Add selection class if active
     if(currentState.isSelectionMode) grid.classList.add('selection-mode');
 
     let items;
 
-    // FILTERING LOGIC START
     if (currentState.folderId) {
-        // When inside a folder, filter the global caches.
         const folderContentFiles = allFilesCache.filter(i => i.parent_id === currentState.folderId);
         const folderContentFolders = allFoldersCache.filter(i => i.parent_id === currentState.folderId);
         items = [...folderContentFolders, ...folderContentFiles];
     } else {
-        // Top level tabs, use the new global caches.
         switch (currentState.tab) {
             case 'folders':
-                // Show only top-level folders.
                 items = allFoldersCache.filter(f => f.parent_id === null);
                 break;
             case 'image':
@@ -536,110 +659,68 @@ function renderGrid() {
         if(currentSort==='size') return (b.size||0)-(a.size||0); 
         return new Date(b.created_at)-new Date(a.created_at); 
     });
-    // FILTERING LOGIC END
 
     if(items.length === 0) { 
-        currentRenderedItems = []; // Clear cache if grid is empty
+        currentRenderedItems = [];
         if(currentState.folderId) { grid.innerHTML = `<div class="empty-pro"><i class="far fa-folder-open"></i><p>${t('empty_folder_content')}</p></div>`; return; }
         if(currentState.tab === 'folders') { grid.innerHTML = `<div class="empty-pro"><i class="fas fa-folder-open"></i><p>${t('empty_folders')}</p></div>`; return; }
-        if (items.length === 0 && allFilesCache.length === 0 && allFoldersCache.length === 0) { /* Welcome screen code */ }
+        if (items.length === 0 && allFilesCache.length === 0 && allFoldersCache.length === 0) {
+            // Welcome screen logic can go here if needed
+        }
         grid.innerHTML = `<div class="empty-pro"><i class="fas fa-inbox"></i><p>${t('empty_all')}</p></div>`;
         return; 
     }
 
-    currentRenderedItems = items; // Cache the rendered items array for drag-selection logic
+    currentRenderedItems = items;
 
-    items.forEach(item => {
-        const el=document.createElement('div'); 
-        el.className='item'; 
-        el.id=`item-${item.id}`;
-        
-        // Selection state class
-        if (currentState.selectedFiles.has(item.id)) {
-            el.classList.add('selected');
-        }
+    const shouldGroup = currentSort === 'date' && currentState.tab !== 'folders' && !currentState.folderId && items.length > 0;
 
-        let c='';
-        if(item.type==='folder') {
-            c=`<i class="icon fas fa-folder folder-icon"></i>`;
-        } else {
-            if(item.name.match(/\.(jpg|png)$/i)) {
-                c=`<img src="${API_URL}/api/preview/${item.file_id}" class="item-preview" loading="lazy">`;
-            } else if(item.name.match(/\.(mp4|mov)$/i)) {
-                if (item.thumbnail_id) {
-                    c = `<img src="${API_URL}/api/preview/${item.thumbnail_id}" class="item-preview" loading="lazy"><div class="video-overlay"><i class="fas fa-play"></i></div>`;
-                } else {
-                    c = `<i class="icon fas fa-video icon-video"></i>`;
-                }
-            } else {
-                c=`<i class="icon fas fa-file file-icon"></i>`;
-            }
-        }
-        
-        // Icon for selection mode
-        const checkIcon = currentState.selectedFiles.has(item.id) ? 'fa-check-circle' : 'fa-circle';
-        
-        el.innerHTML = `
-            ${c}
-            <div class="success-overlay"><i class="fas fa-check"></i></div>
-            <div class="select-indicator"><i class="far ${checkIcon}"></i></div>
-            <div class="name">${item.name}</div>
-            <div class="menu-btn" onclick="openContextMenu(event, '${encodeURIComponent(JSON.stringify(item))}')">
-                <i class="fas fa-ellipsis-v"></i>
-            </div>
-        `;
+    if (shouldGroup) {
+        const groupedItems = items.reduce((acc, item) => {
+            const date = new Date(item.created_at);
+            const key = `${date.getFullYear()}-${date.getMonth()}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(item);
+            return acc;
+        }, {});
 
-        // CLICK & TOUCH LOGIC
-        
-        // 1. Click Handler
-        el.onclick = (e) => { 
-            if(e.target.closest('.menu-btn')) return; 
-            
-            if (currentState.isSelectionMode) {
-                toggleSelection(item.id);
-            } else {
-                if(item.type==='folder') openFolder(item.id, item.name); 
-                else downloadFile(item, el); 
-            }
-        };
-
-        // 2. Long Press Handler
-        let pressTimer;
-        el.addEventListener('touchstart', (e) => {
-            // If we are already in selection mode, a long press should do nothing.
-            // The normal 'onclick' will handle tapping to toggle.
-            if (currentState.isSelectionMode) return;
-            
-            // Clear any previous timer
-            clearTimeout(pressTimer);
-
-            // Start a timer for the long press
-            pressTimer = setTimeout(() => {
-                // Long press detected
-                e.preventDefault(); // Prevent default actions like scrolling or context menu
-
-                if (navigator.vibrate) navigator.vibrate(20); // Haptic feedback
-
-                // Enter selection mode with the current item
-                enterSelectionMode(item.id);
-
-                // Initialize the drag-to-select state
-                dragSelectState.isActive = true;
-                dragSelectState.anchorEl = el;
-                dragSelectState.currentEl = el;
-
-            }, 500); // 500ms for a long press
-        }, { passive: false }); // passive: false is required for preventDefault() to work
-
-        el.addEventListener('touchend', () => clearTimeout(pressTimer)); // Clear timer if touch ends before 500ms
-        el.addEventListener('touchmove', () => clearTimeout(pressTimer));
-        el.addEventListener('contextmenu', (e) => {
-             e.preventDefault(); // Prevent native menu on long press
-             return false;
+        const sortedKeys = Object.keys(groupedItems).sort((a, b) => {
+            const [yearA, monthA] = a.split('-').map(Number);
+            const [yearB, monthB] = b.split('-').map(Number);
+            if (yearA !== yearB) return yearB - yearA;
+            return monthB - monthA;
         });
 
-        grid.appendChild(el);
-    });
+        const currentYear = new Date().getFullYear();
+        const monthTranslations = t('months');
+
+        for (const key of sortedKeys) {
+            const [year, month] = key.split('-').map(Number);
+            const groupItems = groupedItems[key];
+
+            const header = document.createElement('div');
+            header.className = 'month-header';
+
+            let titleText = monthTranslations[month];
+            if (year !== currentYear) titleText += ` ${year}`;
+            
+            const monthItemIds = groupItems.map(i => i.id);
+            const areAllSelected = currentState.isSelectionMode && monthItemIds.length > 0 && monthItemIds.every(id => currentState.selectedFiles.has(id));
+            const checkIcon = areAllSelected ? 'fa-check-square' : 'fa-square';
+
+            header.innerHTML = `
+                <div class="month-title">${titleText}</div>
+                <div class="month-select" onclick="toggleMonthSelection(${year}, ${month})">
+                    <i class="far ${checkIcon}"></i>
+                </div>
+            `;
+            grid.appendChild(header);
+
+            groupItems.forEach(item => grid.appendChild(createItemElement(item)));
+        }
+    } else {
+        items.forEach(item => grid.appendChild(createItemElement(item)));
+    }
 }
 
 function updateUI() {

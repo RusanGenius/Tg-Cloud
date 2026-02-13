@@ -870,3 +870,30 @@ body.hide-labels .item .name {
 .item-preview, .folder-icon, .file-icon, .icon-video {
     transition: transform 0.2s ease, filter 0.2s ease;
 }
+
+/* --- MONTH HEADERS --- */
+.month-header {
+    grid-column: 1 / -1; /* Span all columns */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 5px 5px 5px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.month-title {
+    text-transform: capitalize;
+}
+
+.month-select {
+    cursor: pointer;
+    font-size: 20px;
+    color: var(--accent);
+    padding: 5px;
+}
+
+[data-theme="light"] .month-select {
+    color: var(--text-primary);
+}
