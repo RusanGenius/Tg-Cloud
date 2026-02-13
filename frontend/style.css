@@ -768,7 +768,7 @@ body.hide-labels .item .name {
 
 /* TOAST NOTIFICATION */
 .toast {
-    position: fixed; top: 5px; left: 50%; transform: translateX(-50%);
+    position: fixed; top: 2px; left: 50%; transform: translateX(-50%);
     background: var(--nav-bg); 
     backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--glass-border); 
