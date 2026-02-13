@@ -758,8 +758,14 @@ function renderGrid() {
 }
 
 function updateUI() {
-    document.getElementById('top-nav').style.display = currentState.folderId ? 'flex' : 'none';
-    document.getElementById('fab-add').style.display = (currentState.tab==='folders') ? 'flex' : 'none';
+    const inFolder = !!currentState.folderId;
+    document.getElementById('top-nav').style.display = inFolder ? 'flex' : 'none';
+    document.getElementById('fab-add').style.display = (currentState.tab === 'folders' && !inFolder) ? 'flex' : 'none';
+
+    // Toggle header buttons for folder view
+    document.getElementById('settings-btn').style.display = inFolder ? 'none' : 'flex';
+    document.getElementById('save-all-btn').style.display = inFolder ? 'flex' : 'none';
+
     updateHeaderTitle();
 }
 function openFolder(id, name) { currentState.folderId=id; currentState.folderName=name; updateUI(); renderGrid(); }

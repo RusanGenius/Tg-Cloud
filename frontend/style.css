@@ -66,16 +66,22 @@ body {
     right: 0;
     z-index: 60;
     padding: 10px 15px;
+    height: 56px;
+    box-sizing: border-box;
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     pointer-events: none; /* Container isn't clickable */
     transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
     background: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     border: none;
-    height: auto;
+}
+
+.top-nav {
+    top: 56px; /* Position below main header */
+    justify-content: flex-start;
 }
 
 .header-hidden {
@@ -86,7 +92,7 @@ body {
 .app-header > *,
 .top-nav > *,
 .settings-header > *,
-.selection-header .selection-header-inner {
+.selection-header > * {
     pointer-events: all; /* Children are clickable */
     background: var(--nav-bg);
     backdrop-filter: blur(20px);
@@ -174,7 +180,7 @@ body {
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
 
-.grid.with-nav { padding-top: 75px; }
+.grid.with-nav { padding-top: 122px; } /* 56px * 2 + 10px */
 
 /* --- EMPTY STATE & WELCOME SCREEN --- */
 
@@ -824,17 +830,12 @@ body.hide-labels .item .name {
 /* --- SELECTION MODE STYLES --- */
 
 .selection-header {
-    justify-content: center;
-}
-
-.selection-header .selection-header-inner {
     justify-content: space-between;
-    width: auto;
-    min-width: 85%;
 }
 
 /* Round buttons */
-.settings-btn, .close-settings {
+.settings-btn, 
+.close-settings {
     width: 42px;
     height: 42px;
     border-radius: 50%;

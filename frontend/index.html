@@ -25,23 +25,24 @@
         <div class="app-title" id="header-title">
             <i class="fas fa-cloud"></i> Tg Cloud
         </div>
-        <div class="settings-btn" onclick="openSettings()">
+        <div class="nav-action-btn" id="save-all-btn" style="display: none;" onclick="downloadAllInFolder()">
+            <span data-i18n="save_all">Сохр. всё</span> <i class="fas fa-download"></i>
+        </div>
+        <div class="settings-btn" id="settings-btn" onclick="openSettings()">
             <i class="fas fa-cog"></i>
         </div>
     </div>
 
     <!-- SELECTION HEADER (Hidden by default) -->
     <div class="selection-header" id="selection-header" style="display: none;">
-        <div class="selection-header-inner">
-            <div class="cancel-btn" onclick="exitSelectionMode()">
-                <span data-i18n="btn_cancel">Отмена</span>
-            </div>
-            <div class="selection-count" id="selection-count">0</div>
-            <div class="selection-actions">
-                <i class="fas fa-share-alt" onclick="bulkShare()"></i>
-                <i class="fas fa-folder-open" onclick="bulkMove()"></i>
-                <i class="fas fa-trash" onclick="bulkDelete()"></i>
-            </div>
+        <div class="cancel-btn" onclick="exitSelectionMode()">
+            <span data-i18n="btn_cancel">Отмена</span>
+        </div>
+        <div class="selection-count" id="selection-count">0</div>
+        <div class="selection-actions">
+            <i class="fas fa-share-alt" onclick="bulkShare()"></i>
+            <i class="fas fa-folder-open" onclick="bulkMove()"></i>
+            <i class="fas fa-trash" onclick="bulkDelete()"></i>
         </div>
     </div>
 
@@ -49,9 +50,6 @@
     <div class="top-nav" id="top-nav" style="display: none;">
         <div class="breadcrumbs" onclick="goBack()">
             <i class="fas fa-chevron-left"></i> <span data-i18n="back">Назад</span>
-        </div>
-        <div class="nav-action-btn" onclick="downloadAllInFolder()">
-            <span data-i18n="save_all">Сохр. всё</span> <i class="fas fa-download"></i>
         </div>
     </div>
 
