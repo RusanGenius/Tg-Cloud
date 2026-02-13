@@ -706,7 +706,7 @@ function renderGrid() {
             
             const monthItemIds = groupItems.map(i => i.id);
             const areAllSelected = currentState.isSelectionMode && monthItemIds.length > 0 && monthItemIds.every(id => currentState.selectedFiles.has(id));
-            const checkIcon = areAllSelected ? 'fa-check-square' : 'fa-square';
+            const checkIcon = areAllSelected ? 'fa-check-circle' : 'fa-circle';
 
             header.innerHTML = `
                 <div class="month-title">${titleText}</div>

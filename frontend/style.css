@@ -890,10 +890,6 @@ body.hide-labels .item .name {
 .month-select {
     cursor: pointer;
     font-size: 20px;
-    color: var(--accent);
+    color: var(--text-secondary);
     padding: 5px;
-}
-
-[data-theme="light"] .month-select {
-    color: var(--text-primary);
 }
