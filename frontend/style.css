@@ -653,6 +653,13 @@ body.hide-labels .item .name {
     box-shadow: 0 20px 50px rgba(0,0,0,0.5);
     animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+@keyframes tremble {
+    0% { transform: rotate(0); }
+    33% { transform: rotate(1.2deg); }
+    66% { transform: rotate(-1.2deg); }
+    100% { transform: rotate(0); }
+}
+
 @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 
 .modal-list { max-height: 50vh; overflow-y: auto; text-align: left; margin: 15px 0; }
@@ -859,6 +866,10 @@ body.hide-labels .item .name {
     filter: brightness(0.7);
 }
 
+.grid.selection-mode .item:not(.selected) {
+    animation: tremble 0.35s ease-in-out infinite;
+}
+
 [data-theme="light"] .item.selected .item-preview,
 [data-theme="light"] .item.selected .folder-icon,
 [data-theme="light"] .item.selected .file-icon,
@@ -868,7 +879,7 @@ body.hide-labels .item .name {
 
 /* Smooth transition for transform */
 .item-preview, .folder-icon, .file-icon, .icon-video {
-    transition: transform 0.2s ease, filter 0.2s ease;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.2s ease;
 }
 
 /* --- MONTH HEADERS --- */
