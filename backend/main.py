@@ -311,6 +311,11 @@ class AdminRequest(BaseModel):
     admin_id: int
     target_user_id: Optional[int] = None
 
+class SupportRequest(BaseModel):
+    user_id: int
+    type: str
+    message: str
+
 class DeleteAllRequest(BaseModel):
     user_id: int
 
@@ -392,6 +397,40 @@ async def delete_user_admin(req: AdminRequest):
 
 
 # --- API ENDPOINTS: CLIENT ---
+
+@app.post("/api/support")
+async def handle_support_request(req: SupportRequest):
+    try:
+        # 1. Get Admin ID
+        admin_user = supabase.table("users").select("id").eq("username", ADMIN_USERNAME).single().execute()
+        if not admin_user.data:
+            print(f"Admin user '{ADMIN_USERNAME}' not found in database.")
+            raise HTTPException(status_code=500, detail="Admin user not configured.")
+        admin_id = admin_user.data['id']
+
+        # 2. Get User Info
+        user = supabase.table("users").select("username").eq("id", req.user_id).single().execute()
+        username = f"@{user.data['username']}" if user.data and user.data.get('username') else f"ID: {req.user_id}"
+
+        # 3. Format message
+        type_map = {
+            "bug": "сообщение о баге",
+            "complaint": "жалоба",
+            "suggestion": "предложение"
+        }
+        type_str = type_map.get(req.type, "сообщение")
+        
+        message_to_admin = (
+            f"📩 От пользователя {username} пришла {type_str}:\n\n"
+            f"<blockquote>{req.message}</blockquote>"
+        )
+
+        # 4. Send message to admin
+        await bot.send_message(admin_id, message_to_admin, parse_mode="HTML")
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Error in /api/support: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/profile")
 async def get_profile_stats(user_id: int):

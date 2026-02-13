@@ -55,6 +55,16 @@ const translations = {
         show_labels: "Надписи",
         labels_show: "Показ",
         labels_hide: "Скрыть",
+        support_button: "Написать в поддержку",
+        support_title: "Поддержка",
+        support_type_bug: "Баг",
+        support_type_complaint: "Жалоба",
+        support_type_suggestion: "Предложение",
+        support_placeholder: "Опишите проблему или идею...",
+        btn_send: "Отправить",
+        support_sent_bug: "Сообщение о баге отправлено!",
+        support_sent_complaint: "Жалоба отправлена!",
+        support_sent_suggestion: "Предложение отправлено!",
     },
     en: {
         loading: "Loading...", empty: "Empty", back: "Back", save_all: "Save all",
@@ -89,6 +99,16 @@ const translations = {
         show_labels: "Labels",
         labels_show: "Show",
         labels_hide: "Hide",
+        support_button: "Contact Support",
+        support_title: "Support",
+        support_type_bug: "Bug",
+        support_type_complaint: "Complaint",
+        support_type_suggestion: "Suggestion",
+        support_placeholder: "Describe the issue or idea...",
+        btn_send: "Send",
+        support_sent_bug: "Bug report sent!",
+        support_sent_complaint: "Complaint sent!",
+        support_sent_suggestion: "Suggestion sent!",
     }
 };
 
@@ -96,6 +116,7 @@ function t(key) { return translations[currentLang][key] || key; }
 
 function updateLanguage() {
     document.querySelectorAll('[data-i18n]').forEach(el => el.innerText = t(el.dataset.i18n));
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = t(el.dataset.i18nPlaceholder));
     updateSlider('lang-switch', 'lang-glider', currentLang);
     if (!currentState.folderId) updateHeaderTitle();
 }
@@ -283,6 +304,22 @@ function openConfirm(title, text, callback) {
 
 function closeModals() { document.querySelectorAll('.modal-overlay').forEach(el=>el.style.display='none'); }
 
+// --- SUPPORT MODAL ---
+let currentSupportType = 'bug'; // Default support type
+
+function openSupportModal() {
+    const modal = document.getElementById('modal-support');
+    modal.style.display = 'flex';
+    document.getElementById('support-input').value = '';
+    setSupportType('bug'); // Reset to default
+    document.getElementById('support-input').placeholder = t('support_placeholder');
+}
+
+function setSupportType(type) {
+    currentSupportType = type;
+    updateSlider('support-type-selector', document.querySelector('#support-type-selector .segmented-glider'), type);
+}
+
 // --- SETTINGS SCREEN ---
 async function openSettings() {
     document.getElementById('settings-view').style.display = 'flex';
@@ -290,6 +327,23 @@ async function openSettings() {
     updateSlider('grid-switch', 'grid-glider', currentGrid.toString()); updateSlider('sort-switch', 'sort-glider', currentSort);
     updateSlider('labels-switch', 'labels-glider', showLabels.toString());
     
+    const deleteAllRow = document.querySelector('[data-i18n="delete_all"]')?.closest('.setting-row');
+    if (deleteAllRow && !document.getElementById('support-btn-row')) {
+        const supportRow = document.createElement('div');
+        supportRow.className = 'setting-row';
+        supportRow.id = 'support-btn-row';
+        supportRow.style.cursor = 'pointer';
+        supportRow.innerHTML = `
+            <div class="setting-label">
+                <i class="fas fa-comment-dots" style="width: 20px; text-align: center;"></i>
+                <span data-i18n="support_button">${t('support_button')}</span>
+            </div>
+            <i class="fas fa-chevron-right" style="color: var(--text-secondary);"></i>
+        `;
+        supportRow.onclick = openSupportModal;
+        deleteAllRow.parentNode.insertBefore(supportRow, deleteAllRow);
+    }
+
     try { 
         const res = await fetch(`${API_URL}/api/profile?user_id=${USER_ID}`);
         if(res.status === 403) {

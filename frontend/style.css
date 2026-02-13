@@ -743,6 +743,16 @@ body.hide-labels .item .name {
 }
 .modal-input:focus { border-color: var(--accent); }
 
+/* Support Modal Textarea */
+#support-input {
+    width: calc(100% - 24px); /* 100% - padding */
+    margin-top: 10px;
+    margin-bottom: 20px;
+    text-align: left;
+    height: 100px;
+    resize: vertical;
+}
+
 /* CONTEXT MENU */
 .context-menu {
     position: fixed; width: 170px; background: var(--nav-bg); 
