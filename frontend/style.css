@@ -768,7 +768,7 @@ body.hide-labels .item .name {
 
 /* TOAST NOTIFICATION */
 .toast {
-    position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
     background: var(--nav-bg); 
     backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--glass-border); 
@@ -778,7 +778,7 @@ body.hide-labels .item .name {
     z-index: 500; font-size: 14px; font-weight: 500;
     opacity: 0; pointer-events: none; transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
 }
-.toast.show { opacity: 1; top: 85px; pointer-events: auto; }
+.toast.show { opacity: 1; top: 20px; pointer-events: auto; }
 
 /* INITIAL LOADING OVERLAY WITH PROGRESS BAR */
 .initial-loading-overlay {
