@@ -21,7 +21,7 @@
     </div>
 
     <!-- APP HEADER -->
-    <div class="app-header">
+    <div class="app-header" id="main-header">
         <div class="app-title" id="header-title">
             <i class="fas fa-cloud"></i> Tg Cloud
         </div>
@@ -31,15 +31,17 @@
     </div>
 
     <!-- SELECTION HEADER (Hidden by default) -->
-    <div class="app-header selection-header" id="selection-header" style="display: none;">
-        <div class="cancel-btn" onclick="exitSelectionMode()">
-            <span data-i18n="btn_cancel">Отмена</span>
-        </div>
-        <div class="selection-count" id="selection-count">0</div>
-        <div class="selection-actions">
-            <i class="fas fa-share-alt" onclick="bulkShare()"></i>
-            <i class="fas fa-folder-open" onclick="bulkMove()"></i>
-            <i class="fas fa-trash" onclick="bulkDelete()"></i>
+    <div class="selection-header" id="selection-header" style="display: none;">
+        <div class="selection-header-inner">
+            <div class="cancel-btn" onclick="exitSelectionMode()">
+                <span data-i18n="btn_cancel">Отмена</span>
+            </div>
+            <div class="selection-count" id="selection-count">0</div>
+            <div class="selection-actions">
+                <i class="fas fa-share-alt" onclick="bulkShare()"></i>
+                <i class="fas fa-folder-open" onclick="bulkMove()"></i>
+                <i class="fas fa-trash" onclick="bulkDelete()"></i>
+            </div>
         </div>
     </div>
 
@@ -82,8 +84,10 @@
 
     <!-- ЭКРАН НАСТРОЕК -->
     <div id="settings-view" class="settings-view" style="display: none;">
-        <div class="settings-header">
-            <h2 data-i18n="settings_title">Настройки</h2>
+        <div class="settings-header" id="settings-header">
+            <div class="settings-header-title">
+                <h2 data-i18n="settings_title">Настройки</h2>
+            </div>
             <div class="close-settings" onclick="closeSettings()">
                 <i class="fas fa-times"></i>
             </div>

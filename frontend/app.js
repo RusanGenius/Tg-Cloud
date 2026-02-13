@@ -139,6 +139,40 @@ let currentState = {
     contextItem: null 
 };
 
+// --- SCROLL HANDLING for auto-hiding header ---
+let lastScrollY = window.scrollY;
+
+const handleScroll = () => {
+    const headers = document.querySelectorAll('.app-header, .selection-header, .top-nav');
+    const currentScrollY = window.scrollY;
+
+    // Add a small buffer to prevent hiding on small bounces
+    if (currentScrollY > lastScrollY && currentScrollY > 80) { // Scrolling down
+        headers.forEach(el => el.classList.add('header-hidden'));
+    } else if (currentScrollY < lastScrollY) { // Scrolling up
+        headers.forEach(el => el.classList.remove('header-hidden'));
+    }
+
+    lastScrollY = currentScrollY <= 0 ? 0 : currentScrollY;
+};
+
+window.addEventListener('scroll', handleScroll, { passive: true });
+
+// Special handling for settings view scroll, as it's a separate scrollable container
+document.addEventListener('DOMContentLoaded', () => {
+    const settingsContent = document.querySelector('.settings-content');
+    const settingsHeader = document.querySelector('.settings-header');
+    if (settingsContent && settingsHeader) {
+        let lastSettingsScrollY = 0;
+        settingsContent.addEventListener('scroll', () => {
+            const currentScrollY = settingsContent.scrollTop;
+            if (currentScrollY > lastSettingsScrollY && currentScrollY > 50) { settingsHeader.classList.add('header-hidden'); } 
+            else if (currentScrollY < lastSettingsScrollY) { settingsHeader.classList.remove('header-hidden'); }
+            lastSettingsScrollY = currentScrollY <= 0 ? 0 : currentScrollY;
+        });
+    }
+});
+
 // --- DRAG-TO-SELECT STATE ---
 const dragSelectState = {
     isActive: false,
@@ -304,7 +338,7 @@ function toggleMonthSelection(year, month) {
         if (!currentState.isSelectionMode && monthItemIds.length > 0) {
             currentState.isSelectionMode = true;
             document.getElementById('selection-header').style.display = 'flex';
-            document.querySelector('.app-header:not(.selection-header)').style.display = 'none';
+            document.getElementById('main-header').style.display = 'none';
             document.querySelector('.bottom-bar').style.display = 'none';
             document.querySelector('.fab-add').style.display = 'none';
         }
@@ -883,7 +917,7 @@ function enterSelectionMode(initialItemId) {
     
     // UI Updates
     document.getElementById('selection-header').style.display = 'flex';
-    document.querySelector('.app-header:not(.selection-header)').style.display = 'none'; // Hide normal header
+    document.getElementById('main-header').style.display = 'none'; // Hide normal header
     
     // Hide bottom bar (optional, better UX)
     document.querySelector('.bottom-bar').style.display = 'none';
@@ -899,7 +933,7 @@ function exitSelectionMode() {
     
     // UI Updates
     document.getElementById('selection-header').style.display = 'none';
-    document.querySelector('.app-header:not(.selection-header)').style.display = 'flex';
+    document.getElementById('main-header').style.display = 'flex';
     document.querySelector('.bottom-bar').style.display = 'flex';
     if(currentState.tab === 'folders') document.querySelector('.fab-add').style.display = 'flex';
     
