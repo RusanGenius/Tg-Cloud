@@ -415,13 +415,13 @@ async def handle_support_request(req: SupportRequest):
         # 3. Format message
         type_map = {
             "bug": "сообщение о баге",
-            "complaint": "жалоба",
+            "complaint": "жалобу",
             "suggestion": "предложение"
         }
         type_str = type_map.get(req.type, "сообщение")
         
         message_to_admin = (
-            f"📩 От пользователя {username} пришла {type_str}:\n\n"
+            f"⚠️ Пользователь {username} написал {type_str}:\n\n"
             f"<blockquote>{req.message}</blockquote>"
         )
 
