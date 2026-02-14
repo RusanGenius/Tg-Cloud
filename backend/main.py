@@ -133,7 +133,7 @@ async def command_start(message: Message, command: CommandObject):
     
     try:
         supabase.table("users").upsert({"id": user_id, "username": username}).execute()
-    except:
+    except Exception:
         pass
 
     args = command.args
@@ -158,11 +158,11 @@ async def command_start(message: Message, command: CommandObject):
                         await message.answer_video(f_id)
                     else:
                         await message.answer_document(f_id)
-                except:
+                except Exception:
                     await message.answer("Ошибка отправки.")
             else:
                 await message.answer("Файл не найден.")
-        except:
+        except Exception:
              await message.answer("Некорректная ссылка.")
     
     # 2. FOLDER SHARING
@@ -184,7 +184,7 @@ async def command_start(message: Message, command: CommandObject):
                 )
             else:
                 await message.answer("Папка не найдена или удалена.")
-        except:
+        except Exception:
             await message.answer("Некорректная ссылка на папку.")
             
     else:
@@ -238,7 +238,9 @@ async def handle_files(message: Message):
     
     # Check for block
     try: check_is_blocked(user_id)
-    except: await message.answer("⛔ Ваш аккаунт заблокирован администратором."); return
+    except Exception: 
+        await message.answer("⛔ Ваш аккаунт заблокирован администратором.")
+        return
 
     file_id = None
     file_name = "Без названия"
@@ -251,7 +253,7 @@ async def handle_files(message: Message):
         file_size = message.document.file_size
     elif message.photo:
         file_id = message.photo[-1].file_id
-        file_name = f"img_{message.date}.jpg"
+        file_name = f"img_{int(message.date.timestamp())}.jpg"
         file_size = message.photo[-1].file_size
     elif message.video:
         file_id = message.video.file_id
@@ -259,9 +261,10 @@ async def handle_files(message: Message):
         file_size = message.video.file_size
         if message.video.thumbnail:
             thumbnail_id = message.video.thumbnail.file_id
-            print(f"Found thumbnail for video. ID: {thumbnail_id}")
-        else:
-            print("No thumbnail found for video.")
+    elif message.audio:
+        file_id = message.audio.file_id
+        file_name = message.audio.file_name or f"audio_{int(message.date.timestamp())}.mp3"
+        file_size = message.audio.file_size
 
     if file_id:
         try:
