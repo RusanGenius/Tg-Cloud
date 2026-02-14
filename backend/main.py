@@ -140,12 +140,13 @@ async def command_start(message: Message, command: CommandObject):
     
     # 1. FILE SHARING
     if args and args.startswith("file_"):
+        processing_message = await message.answer("⏳")
         requested_uuid = args.replace("file_", "")
         try:
             res = supabase.table("items").select("*").eq("id", requested_uuid).limit(1).execute()
             if res.data:
                 file_data = res.data[0]
-                await message.answer(f"📂 Вам отправили файл: <b>{file_data['name']}</b>", parse_mode="HTML")
+                await processing_message.edit_text(f"📂 Вам отправили файл: <b>{file_data['name']}</b>", parse_mode="HTML")
                 if file_data['type'] == 'folder':
                      await message.answer("Это папка. Используйте ссылку для папки.")
                      return
@@ -159,14 +160,15 @@ async def command_start(message: Message, command: CommandObject):
                     else:
                         await message.answer_document(f_id)
                 except Exception:
-                    await message.answer("Ошибка отправки.")
+                    await message.answer("Ошибка при отправке файла.")
             else:
-                await message.answer("Файл не найден.")
+                await processing_message.edit_text("Файл не найден.")
         except Exception:
-             await message.answer("Некорректная ссылка.")
+             await processing_message.edit_text("Некорректная ссылка.")
     
     # 2. FOLDER SHARING
     elif args and args.startswith("folder_"):
+        processing_message = await message.answer("⏳")
         folder_uuid = args.replace("folder_", "")
         try:
             res = supabase.table("items").select("*").eq("id", folder_uuid).eq("type", "folder").limit(1).execute()
@@ -177,15 +179,15 @@ async def command_start(message: Message, command: CommandObject):
                     [InlineKeyboardButton(text="📥 Выгрузить в чат", callback_data=f"send_{folder_uuid}")],
                     [InlineKeyboardButton(text="👀 Посмотреть содержимое", callback_data=f"view_{folder_uuid}")]
                 ])
-                await message.answer(
+                await processing_message.edit_text(
                     f"📁 Вам отправили папку «<b>{folder_data['name']}</b>» с файлами.", 
                     reply_markup=kb, 
                     parse_mode="HTML"
                 )
             else:
-                await message.answer("Папка не найдена или удалена.")
+                await processing_message.edit_text("Папка не найдена или удалена.")
         except Exception:
-            await message.answer("Некорректная ссылка на папку.")
+            await processing_message.edit_text("Некорректная ссылка на папку.")
             
     else:
         await message.answer("Привет! Отправь мне файлы для сохранения или открой Mini App.", 
