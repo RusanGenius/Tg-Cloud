@@ -422,6 +422,92 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ Режим ответа отменён")
 
+# --- ADMIN MANAGEMENT COMMANDS ---
+
+@dp.message(Command("support_admins"))
+async def cmd_support_admins(message: Message):
+    """Show support admins status (main admin only)."""
+    user_id = message.from_user.id
+    
+    if not is_main_admin(user_id):
+        return
+    
+    admin2_id = get_admin_id(ADMIN2_USERNAME)
+    if not admin2_id:
+        await message.answer("❌ Второй админ ещё не зарегистрирован в базе")
+        return
+    
+    # Get status
+    res = supabase.table("users").select("support_blocked").eq("id", admin2_id).single().execute()
+    is_blocked = res.data.get('support_blocked', False) if res.data else False
+    
+    status_text = "❌ Заблокирован" if is_blocked else "✅ Активен"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🔒 Заблокировать" if not is_blocked else "🔓 Разблокировать",
+            callback_data=f"toggle_support_{admin2_id}"
+        )]
+    ])
+    
+    await message.answer(
+        f"📋 <b>Управление доступом к поддержке</b>\n\n"
+        f"Второй админ: @{ADMIN2_USERNAME}\n"
+        f"Статус: {status_text}\n\n"
+        f"Нажми кнопку, чтобы изменить статус",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+@dp.callback_query(F.data.startswith("toggle_support_"))
+async def cb_toggle_support_access(callback: CallbackQuery):
+    """Toggle second admin support access."""
+    admin_id = callback.from_user.id
+    
+    if not is_main_admin(admin_id):
+        await callback.answer("❌ Доступ только для главного админа", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    if len(parts) < 3:
+        await callback.answer("❌ Ошибка", show_alert=True)
+        return
+    
+    try:
+        target_user_id = int(parts[2])
+    except ValueError:
+        await callback.answer("❌ Ошибка", show_alert=True)
+        return
+    
+    # Get current status
+    res = supabase.table("users").select("support_blocked").eq("id", target_user_id).single().execute()
+    is_blocked = res.data.get('support_blocked', False) if res.data else False
+    new_status = not is_blocked
+    
+    # Update
+    supabase.table("users").update({"support_blocked": new_status}).eq("id", target_user_id).execute()
+    
+    status_text = "заблокирован" if new_status else "разблокирован"
+    await callback.answer(f"✅ Второй админ {status_text}", show_alert=True)
+    
+    # Update message
+    new_status_text = "❌ Заблокирован" if new_status else "✅ Активен"
+    new_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🔒 Заблокировать" if not new_status else "🔓 Разблокировать",
+            callback_data=f"toggle_support_{target_user_id}"
+        )]
+    ])
+    
+    await callback.message.edit_text(
+        f"📋 <b>Управление доступом к поддержке</b>\n\n"
+        f"Второй админ: @{ADMIN2_USERNAME}\n"
+        f"Статус: {new_status_text}\n\n"
+        f"Нажми кнопку, чтобы изменить статус",
+        parse_mode="HTML",
+        reply_markup=new_keyboard
+    )
+
 @dp.message(F.document | F.photo | F.video | F.audio)
 async def handle_files(message: Message):
     user_id = message.from_user.id
