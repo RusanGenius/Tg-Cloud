@@ -24,6 +24,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL") # The public URL of your Render service
 ADMIN_USERNAME = "astermaneiro"
+ADMIN2_USERNAME = "Ginlys"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 bot = Bot(token=BOT_TOKEN)
@@ -41,6 +42,37 @@ SUPPORT_TEMPLATES = {
     "complaint": "Спасибо за обратную связь! Мы рассмотрим вашу жалобу и примем необходимые меры.",
     "suggestion": "Спасибо за предложение! Мы обязательно рассмотрим его и учтём в будущей разработке."
 }
+
+# --- ADMIN HELPERS ---
+
+def get_admin_id(username: str) -> Optional[int]:
+    """Get admin ID by username."""
+    res = supabase.table("users").select("id").eq("username", username).single().execute()
+    return res.data['id'] if res.data else None
+
+def is_main_admin(user_id: int) -> bool:
+    """Check if user is main admin."""
+    admin_id = get_admin_id(ADMIN_USERNAME)
+    return user_id == admin_id
+
+def is_second_admin(user_id: int) -> bool:
+    """Check if user is second admin."""
+    admin2_id = get_admin_id(ADMIN2_USERNAME)
+    return user_id == admin2_id
+
+def is_any_admin(user_id: int) -> bool:
+    """Check if user is any admin."""
+    return is_main_admin(user_id) or is_second_admin(user_id)
+
+def can_manage_support(user_id: int) -> bool:
+    """Check if user can manage support (main admin always can, second admin if not blocked)."""
+    if is_main_admin(user_id):
+        return True
+    if is_second_admin(user_id):
+        # Check if second admin is blocked from support
+        res = supabase.table("users").select("support_blocked").eq("id", user_id).single().execute()
+        return not (res.data and res.data.get('support_blocked', False))
+    return False
 
 # --- HELPER FUNCTIONS ---
 
@@ -257,6 +289,9 @@ async def cb_reply_template(callback: CallbackQuery, state: FSMContext):
     """Handle template reply button click."""
     await callback.answer()
     
+    admin_id = callback.from_user.id
+    admin_username = callback.from_user.username or f"ID:{admin_id}"
+
     # Parse callback data: rt_{user_id}_{type}
     parts = callback.data.split("_")
     if len(parts) < 3:
@@ -273,10 +308,24 @@ async def cb_reply_template(callback: CallbackQuery, state: FSMContext):
     # Get template
     template = SUPPORT_TEMPLATES.get(support_type, "Спасибо за обратную связь!")
     
-    # Send template to user
+    # Send template to user with admin signature
+    signature = f"\n\n<i>— @{admin_username}</i>" if is_second_admin(admin_id) else ""
+    message_text = f"📬 <b>Ответ от поддержки</b>:\n\n{template}{signature}"
+    
     try:
-        await bot.send_message(user_id, f"📬 <b>Ответ от поддержки</b>:\n\n{template}", parse_mode="HTML")
+        await bot.send_message(user_id, message_text, parse_mode="HTML")
         await callback.message.answer(f"✅ Шаблон отправлен пользователю ID: {user_id}")
+        
+        # Notify main admin if second admin responded
+        if is_second_admin(admin_id):
+            main_admin_id = get_admin_id(ADMIN_USERNAME)
+            if main_admin_id:
+                await bot.send_message(
+                    main_admin_id,
+                    f"📋 <b>Ответ от @{admin_username}</b>:\n\n"
+                    f"Пользователю ID:{user_id} отправлен шаблон: <i>{support_type}</i>",
+                    parse_mode="HTML"
+                )
     except Exception as e:
         await callback.message.answer(f"❌ Ошибка отправки: {e}")
     
@@ -286,6 +335,9 @@ async def cb_reply_template(callback: CallbackQuery, state: FSMContext):
 async def cb_reply_custom(callback: CallbackQuery, state: FSMContext):
     """Handle custom reply button click - set state for waiting admin message."""
     await callback.answer()
+    
+    admin_id = callback.from_user.id
+    admin_username = callback.from_user.username or f"ID:{admin_id}"
     
     # Parse callback data: rc_{user_id}
     parts = callback.data.split("_")
@@ -299,8 +351,8 @@ async def cb_reply_custom(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("❌ Ошибка обработки запроса")
         return
     
-    # Store target user in FSM state
-    await state.update_data(target_user_id=target_user_id)
+    # Store target user and admin info in FSM state
+    await state.update_data(target_user_id=target_user_id, admin_username=admin_username, admin_id=admin_id)
     await state.set_state(SupportReply.waiting_for_reply)
     
     await callback.message.answer(
@@ -315,25 +367,44 @@ async def handle_admin_reply(message: Message, state: FSMContext):
     """Handle admin's custom reply message."""
     data = await state.get_data()
     target_user_id = data.get("target_user_id")
-    
+    admin_username = data.get("admin_username")
+    admin_id = data.get("admin_id")
+
     if not target_user_id:
         await message.answer("❌ Ошибка: пользователь не указан")
         await state.clear()
         return
-    
+
     # Copy the message to preserve all content (text, media, etc.)
     try:
+        # Add signature if second admin
+        caption = "📬 <b>Ответ от поддержки</b>"
+        if is_second_admin(admin_id):
+            caption = f"📬 <b>Ответ от поддержки</b>\n<i>— @{admin_username}</i>"
+        
         await bot.copy_message(
             chat_id=target_user_id,
             from_chat_id=message.chat.id,
             message_id=message.message_id,
-            caption="📬 <b>Ответ от поддержки</b>",
+            caption=caption,
             parse_mode="HTML"
         )
         await message.answer(f"✅ Сообщение отправлено пользователю ID: {target_user_id}")
+        
+        # Notify main admin if second admin responded
+        if is_second_admin(admin_id):
+            main_admin_id = get_admin_id(ADMIN_USERNAME)
+            if main_admin_id:
+                await bot.send_message(
+                    main_admin_id,
+                    f"📋 <b>Ответ от @{admin_username}</b>:\n\n"
+                    f"Пользователю ID:{target_user_id} отправлено сообщение:\n"
+                    f"<blockquote>{message.text or '📎 Медиафайл'}</blockquote>",
+                    parse_mode="HTML"
+                )
     except Exception as e:
         await message.answer(f"❌ Ошибка отправки: {e}")
-    
+
     await state.clear()
 
 @dp.message(Command("cancel"))
@@ -501,12 +572,50 @@ async def delete_user_admin(req: AdminRequest):
     admin = supabase.table("users").select("username").eq("id", req.admin_id).single().execute()
     if not admin.data or admin.data['username'] != ADMIN_USERNAME:
         raise HTTPException(403, "Access Denied")
-    
+
     if req.target_user_id == req.admin_id: return {"status": "error"}
 
     supabase.table("items").delete().eq("user_id", req.target_user_id).execute()
     supabase.table("users").delete().eq("id", req.target_user_id).execute()
     return {"status": "ok"}
+
+@app.post("/api/admin/toggle_support_access")
+async def toggle_support_access(req: AdminRequest):
+    """Toggle second admin's access to support (main admin only)."""
+    admin = supabase.table("users").select("username").eq("id", req.admin_id).single().execute()
+    if not admin.data or admin.data['username'] != ADMIN_USERNAME:
+        raise HTTPException(403, "Access Denied")
+    
+    # Check if target is second admin
+    target = supabase.table("users").select("username").eq("id", req.target_user_id).single().execute()
+    if not target.data or target.data['username'] != ADMIN2_USERNAME:
+        raise HTTPException(400, detail="Target is not second admin")
+    
+    # Get current status
+    curr = supabase.table("users").select("support_blocked").eq("id", req.target_user_id).single().execute()
+    new_status = not (curr.data.get('support_blocked', False))
+    
+    # Update support_blocked status
+    supabase.table("users").update({"support_blocked": new_status}).eq("id", req.target_user_id).execute()
+    return {"status": "ok", "support_blocked": new_status}
+
+@app.get("/api/admin/support_status")
+async def get_support_status(admin_id: int):
+    """Get support access status for second admin (main admin only)."""
+    admin = supabase.table("users").select("username").eq("id", admin_id).single().execute()
+    if not admin.data or admin.data['username'] != ADMIN_USERNAME:
+        raise HTTPException(403, "Access Denied")
+    
+    admin2_id = get_admin_id(ADMIN2_USERNAME)
+    if not admin2_id:
+        return {"admin2_exists": False, "support_blocked": False}
+    
+    curr = supabase.table("users").select("support_blocked").eq("id", admin2_id).single().execute()
+    return {
+        "admin2_exists": True,
+        "admin2_id": admin2_id,
+        "support_blocked": curr.data.get('support_blocked', False) if curr.data else False
+    }
 
 
 # --- API ENDPOINTS: CLIENT ---
@@ -514,12 +623,13 @@ async def delete_user_admin(req: AdminRequest):
 @app.post("/api/support")
 async def handle_support_request(req: SupportRequest):
     try:
-        # 1. Get Admin ID
-        admin_user = supabase.table("users").select("id").eq("username", ADMIN_USERNAME).single().execute()
-        if not admin_user.data:
-            print(f"Admin user '{ADMIN_USERNAME}' not found in database.")
-            raise HTTPException(status_code=500, detail="Admin user not configured.")
-        admin_id = admin_user.data['id']
+        # 1. Get Admin IDs
+        admin1_id = get_admin_id(ADMIN_USERNAME)
+        admin2_id = get_admin_id(ADMIN2_USERNAME)
+        
+        if not admin1_id:
+            print(f"Main admin user '{ADMIN_USERNAME}' not found in database.")
+            raise HTTPException(status_code=500, detail="Main admin not configured.")
 
         # 2. Get User Info
         user = supabase.table("users").select("username").eq("id", req.user_id).single().execute()
@@ -539,19 +649,22 @@ async def handle_support_request(req: SupportRequest):
         )
 
         # 4. Create inline keyboard with reply options
-        # Using short callback data to fit 64 bytes limit
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📝 Ответить шаблоном", callback_data=f"rt_{req.user_id}_{req.type}")],
             [InlineKeyboardButton(text="✏️ Написать ответ", callback_data=f"rc_{req.user_id}")]
         ])
 
-        # 5. Send message to admin with buttons
-        try:
-            await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
-            print(f"Support message sent to admin {admin_id} from user {req.user_id}")
-        except Exception as e:
-            print(f"Failed to send support message to admin: {e}")
-            raise e
+        # 5. Send message to both admins
+        sent_count = 0
+        for admin_id in [admin1_id, admin2_id]:
+            if admin_id:
+                try:
+                    await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
+                    sent_count += 1
+                except Exception as e:
+                    print(f"Failed to send support message to admin {admin_id}: {e}")
+        
+        print(f"Support message sent to {sent_count} admins from user {req.user_id}")
         return {"status": "ok"}
     except Exception as e:
         print(f"Error in /api/support: {e}")
