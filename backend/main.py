@@ -252,20 +252,20 @@ async def cb_view_folder(callback: CallbackQuery):
 
 # --- SUPPORT CALLBACKS ---
 
-@dp.callback_query(F.data.startswith("reply_template_"))
+@dp.callback_query(F.data.startswith("rt_"))
 async def cb_reply_template(callback: CallbackQuery, state: FSMContext):
     """Handle template reply button click."""
     await callback.answer()
     
-    # Parse callback data: reply_template_{user_id}_{type}
+    # Parse callback data: rt_{user_id}_{type}
     parts = callback.data.split("_")
     if len(parts) < 3:
         await callback.message.answer("❌ Ошибка обработки запроса")
         return
     
     try:
-        user_id = int(parts[2])
-        support_type = parts[3] if len(parts) > 3 else "complaint"
+        user_id = int(parts[1])
+        support_type = parts[2] if len(parts) > 2 else "complaint"
     except ValueError:
         await callback.message.answer("❌ Ошибка обработки запроса")
         return
@@ -282,19 +282,19 @@ async def cb_reply_template(callback: CallbackQuery, state: FSMContext):
     
     await state.clear()
 
-@dp.callback_query(F.data.startswith("reply_custom_"))
+@dp.callback_query(F.data.startswith("rc_"))
 async def cb_reply_custom(callback: CallbackQuery, state: FSMContext):
     """Handle custom reply button click - set state for waiting admin message."""
     await callback.answer()
     
-    # Parse callback data: reply_custom_{user_id}
+    # Parse callback data: rc_{user_id}
     parts = callback.data.split("_")
-    if len(parts) < 3:
+    if len(parts) < 2:
         await callback.message.answer("❌ Ошибка обработки запроса")
         return
     
     try:
-        target_user_id = int(parts[2])
+        target_user_id = int(parts[1])
     except ValueError:
         await callback.message.answer("❌ Ошибка обработки запроса")
         return
@@ -539,13 +539,19 @@ async def handle_support_request(req: SupportRequest):
         )
 
         # 4. Create inline keyboard with reply options
+        # Using short callback data to fit 64 bytes limit
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Ответить шаблоном", callback_data=f"reply_template_{req.user_id}_{req.type}")],
-            [InlineKeyboardButton(text="✏️ Написать ответ", callback_data=f"reply_custom_{req.user_id}")]
+            [InlineKeyboardButton(text="📝 Ответить шаблоном", callback_data=f"rt_{req.user_id}_{req.type}")],
+            [InlineKeyboardButton(text="✏️ Написать ответ", callback_data=f"rc_{req.user_id}")]
         ])
 
         # 5. Send message to admin with buttons
-        await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
+        try:
+            await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
+            print(f"Support message sent to admin {admin_id} from user {req.user_id}")
+        except Exception as e:
+            print(f"Failed to send support message to admin: {e}")
+            raise e
         return {"status": "ok"}
     except Exception as e:
         print(f"Error in /api/support: {e}")
