@@ -661,8 +661,11 @@ async def handle_support_request(req: SupportRequest):
                 try:
                     await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
                     sent_count += 1
+                    print(f"Support message sent to admin {admin_id}")
                 except Exception as e:
                     print(f"Failed to send support message to admin {admin_id}: {e}")
+            else:
+                print(f"Admin ID is None - admin not registered in database yet")
         
         print(f"Support message sent to {sent_count} admins from user {req.user_id}")
         return {"status": "ok"}
