@@ -533,9 +533,64 @@ async def cmd_notify_old_admin(message: Message):
     
     try:
         await bot.send_message(old_admin_id, notification_text)
-        await message.answer(f"✅ Сообщение отправлено @{old_admin_id} (ID: {old_admin_id})")
+        await message.answer(f"✅ Сообщение отправлено пользователю ID: {old_admin_id}")
     except Exception as e:
         await message.answer(f"❌ Ошибка отправки: {e}")
+
+@dp.message(Command("notify_new_admin"))
+async def cmd_notify_new_admin(message: Message):
+    """Send notification to new admin genxcid21 (main admin only)."""
+    user_id = message.from_user.id
+    
+    if not is_main_admin(user_id):
+        return
+    
+    new_admin_id = get_admin_id(ADMIN2_USERNAME)
+    if not new_admin_id:
+        await message.answer(f"❌ Новый админ {ADMIN2_USERNAME} не найден в базе")
+        return
+    
+    notification_text = (
+        "Здравствуйте!\n\n"
+        "Данным сообщением уведомляем вас о том, что вам предоставлены права администратора в системе Tg Cloud.\n\n"
+        "С этого момента вам доступен функционал обработки входящих запросов от пользователей. В вашу компетенцию входит:\n"
+        "• Рассмотрение и решение жалоб.\n"
+        "• Обработка технических отчетов о багах и ошибках.\n"
+        "• Рецензирование предложений по улучшению сервиса.\n\n"
+        "Желаем продуктивной работы. Команда Tg Cloud всегда на связи для уточнения рабочих вопросов."
+    )
+    
+    try:
+        await bot.send_message(new_admin_id, notification_text)
+        await message.answer(f"✅ Сообщение отправлено пользователю ID: {new_admin_id}")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка отправки: {e}")
+
+@dp.message(Command("help"))
+async def cmd_help(message: Message):
+    """Show available commands."""
+    user_id = message.from_user.id
+    is_main = is_main_admin(user_id)
+    
+    commands = [
+        ("/start", "Запустить бота / открыть Mini App"),
+        ("/support", "Написать в поддержку (через Mini App)"),
+    ]
+    
+    if is_main:
+        commands.extend([
+            ("/support_admins", "Управление доступом второго админа к поддержке"),
+            ("/notify_new_admin", "Отправить уведомление новому админу"),
+            ("/notify_old_admin", "Отправить уведомление старому админу"),
+            ("/help", "Показать этот список команд"),
+        ])
+    
+    commands_text = "\n".join([f"<b>{cmd}</b> — {desc}" for cmd, desc in commands])
+    
+    await message.answer(
+        f"📖 <b>Доступные команды</b>:\n\n{commands_text}",
+        parse_mode="HTML"
+    )
 
 @dp.message(F.document | F.photo | F.video | F.audio)
 async def handle_files(message: Message):
