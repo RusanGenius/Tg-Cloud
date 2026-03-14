@@ -24,7 +24,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL") # The public URL of your Render service
 ADMIN_USERNAME = "astermaneiro"
-ADMIN2_USERNAME = "Ginlys"
+ADMIN2_USERNAME = "genxcid21"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 bot = Bot(token=BOT_TOKEN)
@@ -507,6 +507,35 @@ async def cb_toggle_support_access(callback: CallbackQuery):
         parse_mode="HTML",
         reply_markup=new_keyboard
     )
+
+@dp.message(Command("notify_old_admin"))
+async def cmd_notify_old_admin(message: Message):
+    """Send notification to old admin Ginlys (main admin only)."""
+    user_id = message.from_user.id
+    
+    if not is_main_admin(user_id):
+        return
+    
+    old_admin_id = get_admin_id("Ginlys")
+    if not old_admin_id:
+        await message.answer("❌ Старый админ Ginlys не найден в базе")
+        return
+    
+    notification_text = (
+        "Здравствуйте, Артур!\n\n"
+        "Данным сообщением уведомляем вас о том, что вам предоставлены права администратора в системе Tg Cloud.\n\n"
+        "С этого момента вам доступен функционал обработки входящих запросов от пользователей. В вашу компетенцию входит:\n"
+        "• Рассмотрение и решение жалоб.\n"
+        "• Обработка технических отчетов о багах и ошибках.\n"
+        "• Рецензирование предложений по улучшению сервиса.\n\n"
+        "Желаем продуктивной работы. Команда Tg Cloud всегда на связи для уточнения рабочих вопросов."
+    )
+    
+    try:
+        await bot.send_message(old_admin_id, notification_text)
+        await message.answer(f"✅ Сообщение отправлено @{old_admin_id} (ID: {old_admin_id})")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка отправки: {e}")
 
 @dp.message(F.document | F.photo | F.video | F.audio)
 async def handle_files(message: Message):
