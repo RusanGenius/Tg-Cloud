@@ -12,7 +12,9 @@ from supabase import create_client, Client
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Update, Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, LabeledPrice, PreCheckoutQuery, ContentType
-from aiogram.filters import CommandStart, CommandObject
+from aiogram.filters import CommandStart, CommandObject, Command
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 import aiohttp 
 
 # --- CONFIGURATION ---
@@ -26,6 +28,19 @@ ADMIN_USERNAME = "astermaneiro"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+# --- FSM STATES ---
+
+class SupportReply(StatesGroup):
+    waiting_for_reply = State()
+
+# --- TEMPLATES ---
+
+SUPPORT_TEMPLATES = {
+    "bug": "Спасибо за сообщение о баге! Мы обязательно рассмотрим его и исправим в ближайшее время.",
+    "complaint": "Спасибо за обратную связь! Мы рассмотрим вашу жалобу и примем необходимые меры.",
+    "suggestion": "Спасибо за предложение! Мы обязательно рассмотрим его и учтём в будущей разработке."
+}
 
 # --- HELPER FUNCTIONS ---
 
@@ -234,6 +249,99 @@ async def cb_view_folder(callback: CallbackQuery):
     if len(msg_text) > 4000: msg_text = msg_text[:4000] + "\n..."
     await callback.message.answer(msg_text)
 
+
+# --- SUPPORT CALLBACKS ---
+
+@dp.callback_query(F.data.startswith("reply_template_"))
+async def cb_reply_template(callback: CallbackQuery, state: FSMContext):
+    """Handle template reply button click."""
+    await callback.answer()
+    
+    # Parse callback data: reply_template_{user_id}_{type}
+    parts = callback.data.split("_")
+    if len(parts) < 3:
+        await callback.message.answer("❌ Ошибка обработки запроса")
+        return
+    
+    try:
+        user_id = int(parts[2])
+        support_type = parts[3] if len(parts) > 3 else "complaint"
+    except ValueError:
+        await callback.message.answer("❌ Ошибка обработки запроса")
+        return
+    
+    # Get template
+    template = SUPPORT_TEMPLATES.get(support_type, "Спасибо за обратную связь!")
+    
+    # Send template to user
+    try:
+        await bot.send_message(user_id, f"📬 <b>Ответ от поддержки</b>:\n\n{template}", parse_mode="HTML")
+        await callback.message.answer(f"✅ Шаблон отправлен пользователю ID: {user_id}")
+    except Exception as e:
+        await callback.message.answer(f"❌ Ошибка отправки: {e}")
+    
+    await state.clear()
+
+@dp.callback_query(F.data.startswith("reply_custom_"))
+async def cb_reply_custom(callback: CallbackQuery, state: FSMContext):
+    """Handle custom reply button click - set state for waiting admin message."""
+    await callback.answer()
+    
+    # Parse callback data: reply_custom_{user_id}
+    parts = callback.data.split("_")
+    if len(parts) < 3:
+        await callback.message.answer("❌ Ошибка обработки запроса")
+        return
+    
+    try:
+        target_user_id = int(parts[2])
+    except ValueError:
+        await callback.message.answer("❌ Ошибка обработки запроса")
+        return
+    
+    # Store target user in FSM state
+    await state.update_data(target_user_id=target_user_id)
+    await state.set_state(SupportReply.waiting_for_reply)
+    
+    await callback.message.answer(
+        "✏️ <b>Режим ответа пользователю</b>\n\n"
+        f"Отправьте сообщение, и оно будет переслано пользователю ID: {target_user_id}\n"
+        "Для отмены отправьте /cancel",
+        parse_mode="HTML"
+    )
+
+@dp.message(SupportReply.waiting_for_reply)
+async def handle_admin_reply(message: Message, state: FSMContext):
+    """Handle admin's custom reply message."""
+    data = await state.get_data()
+    target_user_id = data.get("target_user_id")
+    
+    if not target_user_id:
+        await message.answer("❌ Ошибка: пользователь не указан")
+        await state.clear()
+        return
+    
+    # Copy the message to preserve all content (text, media, etc.)
+    try:
+        await bot.copy_message(
+            chat_id=target_user_id,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id,
+            caption="📬 <b>Ответ от поддержки</b>",
+            parse_mode="HTML"
+        )
+        await message.answer(f"✅ Сообщение отправлено пользователю ID: {target_user_id}")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка отправки: {e}")
+    
+    await state.clear()
+
+@dp.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    """Cancel current FSM state."""
+    await state.clear()
+    await message.answer("✅ Режим ответа отменён")
+
 @dp.message(F.document | F.photo | F.video | F.audio)
 async def handle_files(message: Message):
     user_id = message.from_user.id
@@ -424,14 +532,20 @@ async def handle_support_request(req: SupportRequest):
             "suggestion": "предложение"
         }
         type_str = type_map.get(req.type, "сообщение")
-        
+
         message_to_admin = (
             f"⚠️ Пользователь {username} написал {type_str}:\n\n"
             f"<blockquote>{req.message}</blockquote>"
         )
 
-        # 4. Send message to admin
-        await bot.send_message(admin_id, message_to_admin, parse_mode="HTML")
+        # 4. Create inline keyboard with reply options
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📝 Ответить шаблоном", callback_data=f"reply_template_{req.user_id}_{req.type}")],
+            [InlineKeyboardButton(text="✏️ Написать ответ", callback_data=f"reply_custom_{req.user_id}")]
+        ])
+
+        # 5. Send message to admin with buttons
+        await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
         return {"status": "ok"}
     except Exception as e:
         print(f"Error in /api/support: {e}")
