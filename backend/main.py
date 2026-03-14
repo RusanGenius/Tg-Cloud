@@ -47,8 +47,17 @@ SUPPORT_TEMPLATES = {
 
 def get_admin_id(username: str) -> Optional[int]:
     """Get admin ID by username."""
-    res = supabase.table("users").select("id").eq("username", username).single().execute()
-    return res.data['id'] if res.data else None
+    try:
+        # Remove @ if present
+        clean_username = username.lstrip('@')
+        res = supabase.table("users").select("id").eq("username", clean_username).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0]['id']
+        print(f"Admin '{username}' not found in database")
+        return None
+    except Exception as e:
+        print(f"Error getting admin ID for '{username}': {e}")
+        return None
 
 def is_main_admin(user_id: int) -> bool:
     """Check if user is main admin."""
@@ -627,6 +636,8 @@ async def handle_support_request(req: SupportRequest):
         admin1_id = get_admin_id(ADMIN_USERNAME)
         admin2_id = get_admin_id(ADMIN2_USERNAME)
         
+        print(f"Admin IDs: {ADMIN_USERNAME}={admin1_id}, {ADMIN2_USERNAME}={admin2_id}")
+        
         if not admin1_id:
             print(f"Main admin user '{ADMIN_USERNAME}' not found in database.")
             raise HTTPException(status_code=500, detail="Main admin not configured.")
@@ -656,18 +667,18 @@ async def handle_support_request(req: SupportRequest):
 
         # 5. Send message to both admins
         sent_count = 0
-        for admin_id in [admin1_id, admin2_id]:
+        for admin_id, admin_name in [(admin1_id, ADMIN_USERNAME), (admin2_id, ADMIN2_USERNAME)]:
             if admin_id:
                 try:
                     await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
                     sent_count += 1
-                    print(f"Support message sent to admin {admin_id}")
+                    print(f"✅ Support message sent to {admin_name} (ID: {admin_id})")
                 except Exception as e:
-                    print(f"Failed to send support message to admin {admin_id}: {e}")
+                    print(f"❌ Failed to send to {admin_name} (ID: {admin_id}): {e}")
             else:
-                print(f"Admin ID is None - admin not registered in database yet")
+                print(f"⚠️ {admin_name} not found in database (ID is None)")
         
-        print(f"Support message sent to {sent_count} admins from user {req.user_id}")
+        print(f"Support message sent to {sent_count}/2 admins from user {req.user_id}")
         return {"status": "ok"}
     except Exception as e:
         print(f"Error in /api/support: {e}")
