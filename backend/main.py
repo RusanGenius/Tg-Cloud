@@ -1,7 +1,9 @@
 import os
 import asyncio
+import logging
 from typing import Optional, List
 from contextlib import asynccontextmanager
+from functools import wraps
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,26 +11,61 @@ from pydantic import BaseModel
 
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from postgrest.exceptions import APIError as SupabaseAPIError
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Update, Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, LabeledPrice, PreCheckoutQuery, ContentType
 from aiogram.filters import CommandStart, CommandObject, Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-import aiohttp 
+from aiogram.exceptions import TelegramRetryAfter, TelegramAPIError
+import aiohttp
+
+# --- LOGGING CONFIGURATION ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") # The public URL of your Render service
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 ADMIN_USERNAME = "astermaneiro"
 ADMIN2_USERNAME = "genxcid21"
 
+# Validate configuration
+if not BOT_TOKEN:
+    logger.error("❌ BOT_TOKEN not found in environment variables!")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.error("❌ Supabase credentials not found!")
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=BOT_TOKEN, session=aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)))
 dp = Dispatcher()
+
+# --- RETRY DECORATOR FOR SUPABASE ---
+def retry_supabase(max_attempts=3, delay=1.0):
+    """Retry decorator for Supabase operations with exponential backoff."""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return await func(*args, **kwargs)
+                except (SupabaseAPIError, aiohttp.ClientError) as e:
+                    last_exception = e
+                    logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed: {e}")
+                    if attempt < max_attempts - 1:
+                        await asyncio.sleep(delay * (2 ** attempt))
+            logger.error(f"All {max_attempts} attempts failed for {func.__name__}")
+            raise last_exception
+        return wrapper
+    return decorator
 
 # --- FSM STATES ---
 
@@ -422,6 +459,36 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("✅ Режим ответа отменён")
 
+@dp.message(Command("reset_state"))
+async def cmd_reset_state(message: Message, state: FSMContext):
+    """Reset FSM state (useful if bot gets stuck)."""
+    await state.clear()
+    logger.info(f"FSM state reset for user {message.from_user.id}")
+    await message.answer("✅ Состояние сброшено. Попробуйте снова.")
+
+@dp.message(Command("status"))
+async def cmd_status(message: Message):
+    """Check bot status and webhook info."""
+    status_message = await message.answer("⏳ Проверка статуса...")
+    
+    try:
+        bot_info = await bot.get_me()
+        webhook_info = await bot.get_webhook_info()
+        
+        status_text = (
+            f"🤖 <b>Бот:</b> @{bot_info.username}\n"
+            f"✅ <b>Статус:</b> Работает\n\n"
+            f"🔗 <b>Webhook:</b>\n"
+            f"URL: {webhook_info.url}\n"
+            f"Ошибок: {webhook_info.last_error_date or 'Нет'}\n"
+            f"Ожидает: {webhook_info.pending_update_count}\n"
+        )
+        
+        await status_message.edit_text(status_text, parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Status check failed: {e}")
+        await status_message.edit_text(f"❌ Ошибка проверки статуса: {e}")
+
 # --- ADMIN MANAGEMENT COMMANDS ---
 
 @dp.message(Command("support_admins"))
@@ -571,12 +638,13 @@ async def cmd_help(message: Message):
     """Show available commands."""
     user_id = message.from_user.id
     is_main = is_main_admin(user_id)
-    
+
     commands = [
         ("/start", "Запустить бота / открыть Mini App"),
-        ("/support", "Написать в поддержку (через Mini App)"),
+        ("/status", "🔍 Проверить статус бота и webhook"),
+        ("/reset_state", "🔄 Сбросить зависшее состояние (если бот не отвечает)"),
     ]
-    
+
     if is_main:
         commands.extend([
             ("/support_admins", "Управление доступом второго админа к поддержке"),
@@ -584,9 +652,9 @@ async def cmd_help(message: Message):
             ("/notify_old_admin", "Отправить уведомление старому админу"),
             ("/help", "Показать этот список команд"),
         ])
-    
+
     commands_text = "\n".join([f"<b>{cmd}</b> — {desc}" for cmd, desc in commands])
-    
+
     await message.answer(
         f"📖 <b>Доступные команды</b>:\n\n{commands_text}",
         parse_mode="HTML"
@@ -647,13 +715,39 @@ async def handle_files(message: Message):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Initialize bot and webhook on startup."""
     if WEBHOOK_URL:
-        await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-        print(f"--> Webhook set to {WEBHOOK_URL}/webhook")
-        yield
-        await bot.delete_webhook()
+        try:
+            # Delete old webhook first to avoid conflicts
+            logger.info("🔄 Deleting old webhook...")
+            await bot.delete_webhook()
+            
+            # Set new webhook
+            webhook_full_url = f"{WEBHOOK_URL}/webhook"
+            logger.info(f"🔗 Setting webhook to: {webhook_full_url}")
+            result = await bot.set_webhook(webhook_full_url)
+            
+            if result:
+                logger.info(f"✅ Webhook successfully set to {WEBHOOK_URL}/webhook")
+            else:
+                logger.error("❌ Failed to set webhook")
+            
+            yield
+            
+            # Cleanup on shutdown
+            logger.info("🔄 Deleting webhook on shutdown...")
+            await bot.delete_webhook()
+            await bot.session.close()
+            
+        except Exception as e:
+            logger.error(f"❌ Webhook setup error: {e}", exc_info=True)
+            # Fall back to polling mode
+            logger.info("🔄 Falling back to polling mode...")
+            asyncio.create_task(dp.start_polling(bot))
+            yield
+            await bot.session.close()
     else:
-        print("--> WARNING: WEBHOOK_URL not set. Starting in polling mode.")
+        logger.warning("⚠️ WEBHOOK_URL not set. Starting in polling mode.")
         asyncio.create_task(dp.start_polling(bot))
         yield
         await bot.session.close()
@@ -713,10 +807,55 @@ class InvoiceRequest(BaseModel):
 
 @app.post("/webhook")
 async def bot_webhook(update: dict):
-    """Endpoint to receive updates from Telegram."""
-    telegram_update = Update.model_validate(update, context={"bot": bot})
-    await dp.feed_update(bot=bot, update=telegram_update)
-    return {"status": "ok"}
+    """
+    Endpoint to receive updates from Telegram.
+    Added extensive logging and error handling for debugging.
+    """
+    try:
+        logger.info(f"📥 Received webhook update: {update.get('update_id', 'unknown')}")
+        
+        # Validate update
+        if not update:
+            logger.warning("⚠️ Empty update received")
+            return {"status": "error", "message": "Empty update"}
+        
+        # Create Update object
+        try:
+            telegram_update = Update.model_validate(update, context={"bot": bot})
+        except Exception as e:
+            logger.error(f"❌ Failed to parse update: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid update format: {e}")
+        
+        # Get update type for logging
+        update_type = "unknown"
+        if telegram_update.message:
+            update_type = f"message ({telegram_update.message.content_type})"
+        elif telegram_update.callback_query:
+            update_type = "callback_query"
+        elif telegram_update.edited_message:
+            update_type = "edited_message"
+        
+        logger.info(f"📩 Processing {update_type} from user {telegram_update.user_id if telegram_update.user_id else 'unknown'}")
+        
+        # Process update
+        try:
+            await dp.feed_update(bot=bot, update=telegram_update)
+            logger.info(f"✅ Update {update.get('update_id', 'unknown')} processed successfully")
+        except (TelegramRetryAfter, TelegramAPIError) as e:
+            logger.error(f"❌ Telegram API error: {e}")
+            # Don't raise - Telegram will retry
+            return {"status": "error", "message": str(e)}
+        except Exception as e:
+            logger.error(f"❌ Handler error: {e}", exc_info=True)
+            # Don't raise - log and continue
+            return {"status": "error", "message": f"Handler error: {e}"}
+        
+        return {"status": "ok"}
+        
+    except Exception as e:
+        logger.error(f"❌ Webhook error: {e}", exc_info=True)
+        # Always return OK to prevent Telegram from stopping webhook
+        return {"status": "ok", "warning": f"Error logged: {e}"}
 
 # --- API ENDPOINTS: ADMIN ---
 
@@ -1000,6 +1139,8 @@ async def move_file(req: MoveRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from datetime import datetime
+
 @app.post("/api/generate_invoice")
 async def generate_invoice(req: InvoiceRequest):
     try:
@@ -1013,9 +1154,31 @@ async def generate_invoice(req: InvoiceRequest):
         )
         return {"link": link}
     except Exception as e:
-        print(f"Error generating invoice: {e}")
+        logger.error(f"Error generating invoice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for monitoring.
+    Use this with cron-job.org or uptimerobot.com to prevent Render sleep.
+    """
+    try:
+        # Check bot connection
+        bot_info = await bot.get_me()
+        bot_status = "ok"
+    except Exception as e:
+        logger.error(f"Bot health check failed: {e}")
+        bot_status = f"error: {e}"
+    
+    return {
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "webhook_url": WEBHOOK_URL,
+        "bot_username": bot_info.username if bot_info else None,
+        "bot_status": bot_status
+    }
 
 @app.get("/")
 async def root():
-    return {"message": "Tg Cloud v3.0"}
+    return {"message": "Tg Cloud v3.0 (Backend)"}
