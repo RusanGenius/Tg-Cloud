@@ -18,6 +18,8 @@ from aiogram.types import Update, Message, InlineKeyboardMarkup, InlineKeyboardB
 from aiogram.filters import CommandStart, CommandObject, Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramRetryAfter, TelegramAPIError
 import aiohttp
 
@@ -45,17 +47,9 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Create aiohttp session with timeout
+# Bot session will be created in lifespan
 aiohttp_session: aiohttp.ClientSession = None
-
-async def get_aiohttp_session():
-    """Get or create aiohttp session."""
-    global aiohttp_session
-    if aiohttp_session is None or aiohttp_session.closed:
-        aiohttp_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
-    return aiohttp_session
-
-bot = Bot(token=BOT_TOKEN)
+bot: Bot = None  # Will be initialized in lifespan
 dp = Dispatcher()
 
 # --- RETRY DECORATOR FOR SUPABASE ---
@@ -727,11 +721,14 @@ async def handle_files(message: Message):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize bot and webhook on startup."""
-    global aiohttp_session
+    global aiohttp_session, bot
     
-    # Create aiohttp session
-    aiohttp_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
-    bot.session = aiohttp_session
+    # Create aiohttp session first
+    aiohttp_timeout = aiohttp.ClientTimeout(total=30, connect=10)
+    aiohttp_session = aiohttp.ClientSession(timeout=aiohttp_timeout)
+    
+    # Create bot with proper session
+    bot = Bot(token=BOT_TOKEN, session=AiohttpSession(aiohttp_session))
     
     if WEBHOOK_URL:
         try:
@@ -755,6 +752,7 @@ async def lifespan(app: FastAPI):
             logger.info("🔄 Deleting webhook on shutdown...")
             await bot.delete_webhook()
             await aiohttp_session.close()
+            await bot.session.close()
             
         except Exception as e:
             logger.error(f"❌ Webhook setup error: {e}", exc_info=True)
@@ -763,11 +761,13 @@ async def lifespan(app: FastAPI):
             asyncio.create_task(dp.start_polling(bot))
             yield
             await aiohttp_session.close()
+            await bot.session.close()
     else:
         logger.warning("⚠️ WEBHOOK_URL not set. Starting in polling mode.")
         asyncio.create_task(dp.start_polling(bot))
         yield
         await aiohttp_session.close()
+        await bot.session.close()
 
 app = FastAPI(lifespan=lifespan)
 
