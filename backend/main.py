@@ -47,9 +47,8 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Bot session will be created in lifespan
-aiohttp_session: aiohttp.ClientSession = None
-bot: Bot = None  # Will be initialized in lifespan
+# Bot will be initialized in lifespan
+bot: Bot = None
 dp = Dispatcher()
 
 # --- RETRY DECORATOR FOR SUPABASE ---
@@ -723,12 +722,8 @@ async def lifespan(app: FastAPI):
     """Initialize bot and webhook on startup."""
     global aiohttp_session, bot
     
-    # Create aiohttp session first
-    aiohttp_timeout = aiohttp.ClientTimeout(total=30, connect=10)
-    aiohttp_session = aiohttp.ClientSession(timeout=aiohttp_timeout)
-    
-    # Create bot with proper session
-    bot = Bot(token=BOT_TOKEN, session=AiohttpSession(aiohttp_session))
+    # Create bot with default AiohttpSession (no proxy)
+    bot = Bot(token=BOT_TOKEN, session=AiohttpSession())
     
     if WEBHOOK_URL:
         try:
@@ -751,7 +746,6 @@ async def lifespan(app: FastAPI):
             # Cleanup on shutdown
             logger.info("🔄 Deleting webhook on shutdown...")
             await bot.delete_webhook()
-            await aiohttp_session.close()
             await bot.session.close()
             
         except Exception as e:
@@ -760,13 +754,11 @@ async def lifespan(app: FastAPI):
             logger.info("🔄 Falling back to polling mode...")
             asyncio.create_task(dp.start_polling(bot))
             yield
-            await aiohttp_session.close()
             await bot.session.close()
     else:
         logger.warning("⚠️ WEBHOOK_URL not set. Starting in polling mode.")
         asyncio.create_task(dp.start_polling(bot))
         yield
-        await aiohttp_session.close()
         await bot.session.close()
 
 app = FastAPI(lifespan=lifespan)
