@@ -837,14 +837,18 @@ async def bot_webhook(update: dict):
         
         # Get update type for logging
         update_type = "unknown"
+        user_id = "unknown"
         if telegram_update.message:
             update_type = f"message ({telegram_update.message.content_type})"
+            user_id = telegram_update.message.from_user.id
         elif telegram_update.callback_query:
             update_type = "callback_query"
+            user_id = telegram_update.callback_query.from_user.id
         elif telegram_update.edited_message:
             update_type = "edited_message"
-        
-        logger.info(f"📩 Processing {update_type} from user {telegram_update.user_id if telegram_update.user_id else 'unknown'}")
+            user_id = telegram_update.edited_message.from_user.id
+
+        logger.info(f"📩 Processing {update_type} from user {user_id}")
         
         # Process update
         try:
