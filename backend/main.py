@@ -1170,11 +1170,12 @@ async def generate_invoice(req: InvoiceRequest):
         logger.error(f"Error generating invoice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health")
+@app.get("/health", methods=["GET", "HEAD"])
 async def health_check():
     """
     Health check endpoint for monitoring.
     Use this with cron-job.org or uptimerobot.com to prevent Render sleep.
+    Supports both GET and HEAD methods.
     """
     try:
         # Check bot connection
@@ -1183,7 +1184,7 @@ async def health_check():
     except Exception as e:
         logger.error(f"Bot health check failed: {e}")
         bot_status = f"error: {e}"
-    
+
     return {
         "status": "ok",
         "timestamp": datetime.now().isoformat(),
