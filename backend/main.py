@@ -44,7 +44,18 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     logger.error("❌ Supabase credentials not found!")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-bot = Bot(token=BOT_TOKEN, session=aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)))
+
+# Create aiohttp session with timeout
+aiohttp_session: aiohttp.ClientSession = None
+
+async def get_aiohttp_session():
+    """Get or create aiohttp session."""
+    global aiohttp_session
+    if aiohttp_session is None or aiohttp_session.closed:
+        aiohttp_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+    return aiohttp_session
+
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # --- RETRY DECORATOR FOR SUPABASE ---
@@ -716,6 +727,12 @@ async def handle_files(message: Message):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize bot and webhook on startup."""
+    global aiohttp_session
+    
+    # Create aiohttp session
+    aiohttp_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+    bot.session = aiohttp_session
+    
     if WEBHOOK_URL:
         try:
             # Delete old webhook first to avoid conflicts
@@ -737,7 +754,7 @@ async def lifespan(app: FastAPI):
             # Cleanup on shutdown
             logger.info("🔄 Deleting webhook on shutdown...")
             await bot.delete_webhook()
-            await bot.session.close()
+            await aiohttp_session.close()
             
         except Exception as e:
             logger.error(f"❌ Webhook setup error: {e}", exc_info=True)
@@ -745,12 +762,12 @@ async def lifespan(app: FastAPI):
             logger.info("🔄 Falling back to polling mode...")
             asyncio.create_task(dp.start_polling(bot))
             yield
-            await bot.session.close()
+            await aiohttp_session.close()
     else:
         logger.warning("⚠️ WEBHOOK_URL not set. Starting in polling mode.")
         asyncio.create_task(dp.start_polling(bot))
         yield
-        await bot.session.close()
+        await aiohttp_session.close()
 
 app = FastAPI(lifespan=lifespan)
 
