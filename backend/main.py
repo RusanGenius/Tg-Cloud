@@ -1,9 +1,7 @@
 import os
 import asyncio
-import logging
 from typing import Optional, List
 from contextlib import asynccontextmanager
-from functools import wraps
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,118 +9,23 @@ from pydantic import BaseModel
 
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from postgrest.exceptions import APIError as SupabaseAPIError
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Update, Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, LabeledPrice, PreCheckoutQuery, ContentType
-from aiogram.filters import CommandStart, CommandObject, Command
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.context import FSMContext
-from aiogram.client.default import DefaultBotProperties
-from aiogram.client.session.aiohttp import AiohttpSession
-from aiogram.exceptions import TelegramRetryAfter, TelegramAPIError
-import aiohttp
-
-# --- LOGGING CONFIGURATION ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+from aiogram.filters import CommandStart, CommandObject
+import aiohttp 
 
 # --- CONFIGURATION ---
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") # The public URL of your Render service
 ADMIN_USERNAME = "astermaneiro"
-ADMIN2_USERNAME = "genxcid21"
-
-# Validate configuration
-if not BOT_TOKEN:
-    logger.error("❌ BOT_TOKEN not found in environment variables!")
-if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("❌ Supabase credentials not found!")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Bot will be initialized in lifespan
-bot: Bot = None
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-
-# --- RETRY DECORATOR FOR SUPABASE ---
-def retry_supabase(max_attempts=3, delay=1.0):
-    """Retry decorator for Supabase operations with exponential backoff."""
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            last_exception = None
-            for attempt in range(max_attempts):
-                try:
-                    return await func(*args, **kwargs)
-                except (SupabaseAPIError, aiohttp.ClientError) as e:
-                    last_exception = e
-                    logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed: {e}")
-                    if attempt < max_attempts - 1:
-                        await asyncio.sleep(delay * (2 ** attempt))
-            logger.error(f"All {max_attempts} attempts failed for {func.__name__}")
-            raise last_exception
-        return wrapper
-    return decorator
-
-# --- FSM STATES ---
-
-class SupportReply(StatesGroup):
-    waiting_for_reply = State()
-
-# --- TEMPLATES ---
-
-SUPPORT_TEMPLATES = {
-    "bug": "Спасибо за сообщение о баге! Мы обязательно рассмотрим его и исправим в ближайшее время.",
-    "complaint": "Спасибо за обратную связь! Мы рассмотрим вашу жалобу и примем необходимые меры.",
-    "suggestion": "Спасибо за предложение! Мы обязательно рассмотрим его и учтём в будущей разработке."
-}
-
-# --- ADMIN HELPERS ---
-
-def get_admin_id(username: str) -> Optional[int]:
-    """Get admin ID by username."""
-    try:
-        # Remove @ if present
-        clean_username = username.lstrip('@')
-        res = supabase.table("users").select("id").eq("username", clean_username).execute()
-        if res.data and len(res.data) > 0:
-            return res.data[0]['id']
-        print(f"Admin '{username}' not found in database")
-        return None
-    except Exception as e:
-        print(f"Error getting admin ID for '{username}': {e}")
-        return None
-
-def is_main_admin(user_id: int) -> bool:
-    """Check if user is main admin."""
-    admin_id = get_admin_id(ADMIN_USERNAME)
-    return user_id == admin_id
-
-def is_second_admin(user_id: int) -> bool:
-    """Check if user is second admin."""
-    admin2_id = get_admin_id(ADMIN2_USERNAME)
-    return user_id == admin2_id
-
-def is_any_admin(user_id: int) -> bool:
-    """Check if user is any admin."""
-    return is_main_admin(user_id) or is_second_admin(user_id)
-
-def can_manage_support(user_id: int) -> bool:
-    """Check if user can manage support (main admin always can, second admin if not blocked)."""
-    if is_main_admin(user_id):
-        return True
-    if is_second_admin(user_id):
-        # Check if second admin is blocked from support
-        res = supabase.table("users").select("support_blocked").eq("id", user_id).single().execute()
-        return not (res.data and res.data.get('support_blocked', False))
-    return False
 
 # --- HELPER FUNCTIONS ---
 
@@ -331,339 +234,6 @@ async def cb_view_folder(callback: CallbackQuery):
     if len(msg_text) > 4000: msg_text = msg_text[:4000] + "\n..."
     await callback.message.answer(msg_text)
 
-
-# --- SUPPORT CALLBACKS ---
-
-@dp.callback_query(F.data.startswith("rt_"))
-async def cb_reply_template(callback: CallbackQuery, state: FSMContext):
-    """Handle template reply button click."""
-    await callback.answer()
-    
-    admin_id = callback.from_user.id
-    admin_username = callback.from_user.username or f"ID:{admin_id}"
-
-    # Parse callback data: rt_{user_id}_{type}
-    parts = callback.data.split("_")
-    if len(parts) < 3:
-        await callback.message.answer("❌ Ошибка обработки запроса")
-        return
-    
-    try:
-        user_id = int(parts[1])
-        support_type = parts[2] if len(parts) > 2 else "complaint"
-    except ValueError:
-        await callback.message.answer("❌ Ошибка обработки запроса")
-        return
-    
-    # Get template
-    template = SUPPORT_TEMPLATES.get(support_type, "Спасибо за обратную связь!")
-    
-    # Send template to user with admin signature
-    signature = f"\n\n<i>— @{admin_username}</i>" if is_second_admin(admin_id) else ""
-    message_text = f"📬 <b>Ответ от поддержки</b>:\n\n{template}{signature}"
-    
-    try:
-        await bot.send_message(user_id, message_text, parse_mode="HTML")
-        await callback.message.answer(f"✅ Шаблон отправлен пользователю ID: {user_id}")
-        
-        # Notify main admin if second admin responded
-        if is_second_admin(admin_id):
-            main_admin_id = get_admin_id(ADMIN_USERNAME)
-            if main_admin_id:
-                await bot.send_message(
-                    main_admin_id,
-                    f"📋 <b>Ответ от @{admin_username}</b>:\n\n"
-                    f"Пользователю ID:{user_id} отправлен шаблон: <i>{support_type}</i>",
-                    parse_mode="HTML"
-                )
-    except Exception as e:
-        await callback.message.answer(f"❌ Ошибка отправки: {e}")
-    
-    await state.clear()
-
-@dp.callback_query(F.data.startswith("rc_"))
-async def cb_reply_custom(callback: CallbackQuery, state: FSMContext):
-    """Handle custom reply button click - set state for waiting admin message."""
-    await callback.answer()
-    
-    admin_id = callback.from_user.id
-    admin_username = callback.from_user.username or f"ID:{admin_id}"
-    
-    # Parse callback data: rc_{user_id}
-    parts = callback.data.split("_")
-    if len(parts) < 2:
-        await callback.message.answer("❌ Ошибка обработки запроса")
-        return
-    
-    try:
-        target_user_id = int(parts[1])
-    except ValueError:
-        await callback.message.answer("❌ Ошибка обработки запроса")
-        return
-    
-    # Store target user and admin info in FSM state
-    await state.update_data(target_user_id=target_user_id, admin_username=admin_username, admin_id=admin_id)
-    await state.set_state(SupportReply.waiting_for_reply)
-    
-    await callback.message.answer(
-        "✏️ <b>Режим ответа пользователю</b>\n\n"
-        f"Отправьте сообщение, и оно будет переслано пользователю ID: {target_user_id}\n"
-        "Для отмены отправьте /cancel",
-        parse_mode="HTML"
-    )
-
-@dp.message(SupportReply.waiting_for_reply)
-async def handle_admin_reply(message: Message, state: FSMContext):
-    """Handle admin's custom reply message."""
-    data = await state.get_data()
-    target_user_id = data.get("target_user_id")
-    admin_username = data.get("admin_username")
-    admin_id = data.get("admin_id")
-
-    if not target_user_id:
-        await message.answer("❌ Ошибка: пользователь не указан")
-        await state.clear()
-        return
-
-    # Copy the message to preserve all content (text, media, etc.)
-    try:
-        # Add signature if second admin
-        caption = "📬 <b>Ответ от поддержки</b>"
-        if is_second_admin(admin_id):
-            caption = f"📬 <b>Ответ от поддержки</b>\n<i>— @{admin_username}</i>"
-        
-        await bot.copy_message(
-            chat_id=target_user_id,
-            from_chat_id=message.chat.id,
-            message_id=message.message_id,
-            caption=caption,
-            parse_mode="HTML"
-        )
-        await message.answer(f"✅ Сообщение отправлено пользователю ID: {target_user_id}")
-        
-        # Notify main admin if second admin responded
-        if is_second_admin(admin_id):
-            main_admin_id = get_admin_id(ADMIN_USERNAME)
-            if main_admin_id:
-                await bot.send_message(
-                    main_admin_id,
-                    f"📋 <b>Ответ от @{admin_username}</b>:\n\n"
-                    f"Пользователю ID:{target_user_id} отправлено сообщение:\n"
-                    f"<blockquote>{message.text or '📎 Медиафайл'}</blockquote>",
-                    parse_mode="HTML"
-                )
-    except Exception as e:
-        await message.answer(f"❌ Ошибка отправки: {e}")
-
-    await state.clear()
-
-@dp.message(Command("cancel"))
-async def cmd_cancel(message: Message, state: FSMContext):
-    """Cancel current FSM state."""
-    await state.clear()
-    await message.answer("✅ Режим ответа отменён")
-
-@dp.message(Command("reset_state"))
-async def cmd_reset_state(message: Message, state: FSMContext):
-    """Reset FSM state (useful if bot gets stuck)."""
-    await state.clear()
-    logger.info(f"FSM state reset for user {message.from_user.id}")
-    await message.answer("✅ Состояние сброшено. Попробуйте снова.")
-
-@dp.message(Command("status"))
-async def cmd_status(message: Message):
-    """Check bot status and webhook info."""
-    status_message = await message.answer("⏳ Проверка статуса...")
-    
-    try:
-        bot_info = await bot.get_me()
-        webhook_info = await bot.get_webhook_info()
-        
-        status_text = (
-            f"🤖 <b>Бот:</b> @{bot_info.username}\n"
-            f"✅ <b>Статус:</b> Работает\n\n"
-            f"🔗 <b>Webhook:</b>\n"
-            f"URL: {webhook_info.url}\n"
-            f"Ошибок: {webhook_info.last_error_date or 'Нет'}\n"
-            f"Ожидает: {webhook_info.pending_update_count}\n"
-        )
-        
-        await status_message.edit_text(status_text, parse_mode="HTML")
-    except Exception as e:
-        logger.error(f"Status check failed: {e}")
-        await status_message.edit_text(f"❌ Ошибка проверки статуса: {e}")
-
-# --- ADMIN MANAGEMENT COMMANDS ---
-
-@dp.message(Command("support_admins"))
-async def cmd_support_admins(message: Message):
-    """Show support admins status (main admin only)."""
-    user_id = message.from_user.id
-    
-    if not is_main_admin(user_id):
-        return
-    
-    admin2_id = get_admin_id(ADMIN2_USERNAME)
-    if not admin2_id:
-        await message.answer("❌ Второй админ ещё не зарегистрирован в базе")
-        return
-    
-    # Get status
-    res = supabase.table("users").select("support_blocked").eq("id", admin2_id).single().execute()
-    is_blocked = res.data.get('support_blocked', False) if res.data else False
-    
-    status_text = "❌ Заблокирован" if is_blocked else "✅ Активен"
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="🔒 Заблокировать" if not is_blocked else "🔓 Разблокировать",
-            callback_data=f"toggle_support_{admin2_id}"
-        )]
-    ])
-    
-    await message.answer(
-        f"📋 <b>Управление доступом к поддержке</b>\n\n"
-        f"Второй админ: @{ADMIN2_USERNAME}\n"
-        f"Статус: {status_text}\n\n"
-        f"Нажми кнопку, чтобы изменить статус",
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
-
-@dp.callback_query(F.data.startswith("toggle_support_"))
-async def cb_toggle_support_access(callback: CallbackQuery):
-    """Toggle second admin support access."""
-    admin_id = callback.from_user.id
-    
-    if not is_main_admin(admin_id):
-        await callback.answer("❌ Доступ только для главного админа", show_alert=True)
-        return
-    
-    parts = callback.data.split("_")
-    if len(parts) < 3:
-        await callback.answer("❌ Ошибка", show_alert=True)
-        return
-    
-    try:
-        target_user_id = int(parts[2])
-    except ValueError:
-        await callback.answer("❌ Ошибка", show_alert=True)
-        return
-    
-    # Get current status
-    res = supabase.table("users").select("support_blocked").eq("id", target_user_id).single().execute()
-    is_blocked = res.data.get('support_blocked', False) if res.data else False
-    new_status = not is_blocked
-    
-    # Update
-    supabase.table("users").update({"support_blocked": new_status}).eq("id", target_user_id).execute()
-    
-    status_text = "заблокирован" if new_status else "разблокирован"
-    await callback.answer(f"✅ Второй админ {status_text}", show_alert=True)
-    
-    # Update message
-    new_status_text = "❌ Заблокирован" if new_status else "✅ Активен"
-    new_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="🔒 Заблокировать" if not new_status else "🔓 Разблокировать",
-            callback_data=f"toggle_support_{target_user_id}"
-        )]
-    ])
-    
-    await callback.message.edit_text(
-        f"📋 <b>Управление доступом к поддержке</b>\n\n"
-        f"Второй админ: @{ADMIN2_USERNAME}\n"
-        f"Статус: {new_status_text}\n\n"
-        f"Нажми кнопку, чтобы изменить статус",
-        parse_mode="HTML",
-        reply_markup=new_keyboard
-    )
-
-@dp.message(Command("notify_old_admin"))
-async def cmd_notify_old_admin(message: Message):
-    """Send notification to old admin Ginlys (main admin only)."""
-    user_id = message.from_user.id
-    
-    if not is_main_admin(user_id):
-        return
-    
-    old_admin_id = get_admin_id("Ginlys")
-    if not old_admin_id:
-        await message.answer("❌ Старый админ Ginlys не найден в базе")
-        return
-    
-    notification_text = (
-        "Здравствуйте, Артур!\n\n"
-        "Данным сообщением уведомляем вас о том, что вам предоставлены права администратора в системе Tg Cloud.\n\n"
-        "С этого момента вам доступен функционал обработки входящих запросов от пользователей. В вашу компетенцию входит:\n"
-        "• Рассмотрение и решение жалоб.\n"
-        "• Обработка технических отчетов о багах и ошибках.\n"
-        "• Рецензирование предложений по улучшению сервиса.\n\n"
-        "Желаем продуктивной работы. Команда Tg Cloud всегда на связи для уточнения рабочих вопросов."
-    )
-    
-    try:
-        await bot.send_message(old_admin_id, notification_text)
-        await message.answer(f"✅ Сообщение отправлено пользователю ID: {old_admin_id}")
-    except Exception as e:
-        await message.answer(f"❌ Ошибка отправки: {e}")
-
-@dp.message(Command("notify_new_admin"))
-async def cmd_notify_new_admin(message: Message):
-    """Send notification to new admin genxcid21 (main admin only)."""
-    user_id = message.from_user.id
-    
-    if not is_main_admin(user_id):
-        return
-    
-    new_admin_id = get_admin_id(ADMIN2_USERNAME)
-    if not new_admin_id:
-        await message.answer(f"❌ Новый админ {ADMIN2_USERNAME} не найден в базе")
-        return
-    
-    notification_text = (
-        "Здравствуйте!\n\n"
-        "Данным сообщением уведомляем вас о том, что вам предоставлены права администратора в системе Tg Cloud.\n\n"
-        "С этого момента вам доступен функционал обработки входящих запросов от пользователей. В вашу компетенцию входит:\n"
-        "• Рассмотрение и решение жалоб.\n"
-        "• Обработка технических отчетов о багах и ошибках.\n"
-        "• Рецензирование предложений по улучшению сервиса.\n\n"
-        "Желаем продуктивной работы. Команда Tg Cloud всегда на связи для уточнения рабочих вопросов."
-    )
-    
-    try:
-        await bot.send_message(new_admin_id, notification_text)
-        await message.answer(f"✅ Сообщение отправлено пользователю ID: {new_admin_id}")
-    except Exception as e:
-        await message.answer(f"❌ Ошибка отправки: {e}")
-
-@dp.message(Command("help"))
-async def cmd_help(message: Message):
-    """Show available commands."""
-    user_id = message.from_user.id
-    is_main = is_main_admin(user_id)
-
-    commands = [
-        ("/start", "Запустить бота / открыть Mini App"),
-        ("/status", "🔍 Проверить статус бота и webhook"),
-        ("/reset_state", "🔄 Сбросить зависшее состояние (если бот не отвечает)"),
-    ]
-
-    if is_main:
-        commands.extend([
-            ("/support_admins", "Управление доступом второго админа к поддержке"),
-            ("/notify_new_admin", "Отправить уведомление новому админу"),
-            ("/notify_old_admin", "Отправить уведомление старому админу"),
-            ("/help", "Показать этот список команд"),
-        ])
-
-    commands_text = "\n".join([f"<b>{cmd}</b> — {desc}" for cmd, desc in commands])
-
-    await message.answer(
-        f"📖 <b>Доступные команды</b>:\n\n{commands_text}",
-        parse_mode="HTML"
-    )
-
 @dp.message(F.document | F.photo | F.video | F.audio)
 async def handle_files(message: Message):
     user_id = message.from_user.id
@@ -719,44 +289,13 @@ async def handle_files(message: Message):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize bot and webhook on startup."""
-    global aiohttp_session, bot
-    
-    # Create bot with default AiohttpSession (no proxy)
-    bot = Bot(token=BOT_TOKEN, session=AiohttpSession())
-    
     if WEBHOOK_URL:
-        try:
-            # Delete old webhook first to avoid conflicts
-            logger.info("🔄 Deleting old webhook...")
-            await bot.delete_webhook()
-            
-            # Set new webhook
-            webhook_full_url = f"{WEBHOOK_URL}/webhook"
-            logger.info(f"🔗 Setting webhook to: {webhook_full_url}")
-            result = await bot.set_webhook(webhook_full_url)
-            
-            if result:
-                logger.info(f"✅ Webhook successfully set to {WEBHOOK_URL}/webhook")
-            else:
-                logger.error("❌ Failed to set webhook")
-            
-            yield
-            
-            # Cleanup on shutdown
-            logger.info("🔄 Deleting webhook on shutdown...")
-            await bot.delete_webhook()
-            await bot.session.close()
-            
-        except Exception as e:
-            logger.error(f"❌ Webhook setup error: {e}", exc_info=True)
-            # Fall back to polling mode
-            logger.info("🔄 Falling back to polling mode...")
-            asyncio.create_task(dp.start_polling(bot))
-            yield
-            await bot.session.close()
+        await bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+        print(f"--> Webhook set to {WEBHOOK_URL}/webhook")
+        yield
+        await bot.delete_webhook()
     else:
-        logger.warning("⚠️ WEBHOOK_URL not set. Starting in polling mode.")
+        print("--> WARNING: WEBHOOK_URL not set. Starting in polling mode.")
         asyncio.create_task(dp.start_polling(bot))
         yield
         await bot.session.close()
@@ -816,59 +355,10 @@ class InvoiceRequest(BaseModel):
 
 @app.post("/webhook")
 async def bot_webhook(update: dict):
-    """
-    Endpoint to receive updates from Telegram.
-    Added extensive logging and error handling for debugging.
-    """
-    try:
-        logger.info(f"📥 Received webhook update: {update.get('update_id', 'unknown')}")
-        
-        # Validate update
-        if not update:
-            logger.warning("⚠️ Empty update received")
-            return {"status": "error", "message": "Empty update"}
-        
-        # Create Update object
-        try:
-            telegram_update = Update.model_validate(update, context={"bot": bot})
-        except Exception as e:
-            logger.error(f"❌ Failed to parse update: {e}")
-            raise HTTPException(status_code=400, detail=f"Invalid update format: {e}")
-        
-        # Get update type for logging
-        update_type = "unknown"
-        user_id = "unknown"
-        if telegram_update.message:
-            update_type = f"message ({telegram_update.message.content_type})"
-            user_id = telegram_update.message.from_user.id
-        elif telegram_update.callback_query:
-            update_type = "callback_query"
-            user_id = telegram_update.callback_query.from_user.id
-        elif telegram_update.edited_message:
-            update_type = "edited_message"
-            user_id = telegram_update.edited_message.from_user.id
-
-        logger.info(f"📩 Processing {update_type} from user {user_id}")
-        
-        # Process update
-        try:
-            await dp.feed_update(bot=bot, update=telegram_update)
-            logger.info(f"✅ Update {update.get('update_id', 'unknown')} processed successfully")
-        except (TelegramRetryAfter, TelegramAPIError) as e:
-            logger.error(f"❌ Telegram API error: {e}")
-            # Don't raise - Telegram will retry
-            return {"status": "error", "message": str(e)}
-        except Exception as e:
-            logger.error(f"❌ Handler error: {e}", exc_info=True)
-            # Don't raise - log and continue
-            return {"status": "error", "message": f"Handler error: {e}"}
-        
-        return {"status": "ok"}
-        
-    except Exception as e:
-        logger.error(f"❌ Webhook error: {e}", exc_info=True)
-        # Always return OK to prevent Telegram from stopping webhook
-        return {"status": "ok", "warning": f"Error logged: {e}"}
+    """Endpoint to receive updates from Telegram."""
+    telegram_update = Update.model_validate(update, context={"bot": bot})
+    await dp.feed_update(bot=bot, update=telegram_update)
+    return {"status": "ok"}
 
 # --- API ENDPOINTS: ADMIN ---
 
@@ -903,50 +393,12 @@ async def delete_user_admin(req: AdminRequest):
     admin = supabase.table("users").select("username").eq("id", req.admin_id).single().execute()
     if not admin.data or admin.data['username'] != ADMIN_USERNAME:
         raise HTTPException(403, "Access Denied")
-
+    
     if req.target_user_id == req.admin_id: return {"status": "error"}
 
     supabase.table("items").delete().eq("user_id", req.target_user_id).execute()
     supabase.table("users").delete().eq("id", req.target_user_id).execute()
     return {"status": "ok"}
-
-@app.post("/api/admin/toggle_support_access")
-async def toggle_support_access(req: AdminRequest):
-    """Toggle second admin's access to support (main admin only)."""
-    admin = supabase.table("users").select("username").eq("id", req.admin_id).single().execute()
-    if not admin.data or admin.data['username'] != ADMIN_USERNAME:
-        raise HTTPException(403, "Access Denied")
-    
-    # Check if target is second admin
-    target = supabase.table("users").select("username").eq("id", req.target_user_id).single().execute()
-    if not target.data or target.data['username'] != ADMIN2_USERNAME:
-        raise HTTPException(400, detail="Target is not second admin")
-    
-    # Get current status
-    curr = supabase.table("users").select("support_blocked").eq("id", req.target_user_id).single().execute()
-    new_status = not (curr.data.get('support_blocked', False))
-    
-    # Update support_blocked status
-    supabase.table("users").update({"support_blocked": new_status}).eq("id", req.target_user_id).execute()
-    return {"status": "ok", "support_blocked": new_status}
-
-@app.get("/api/admin/support_status")
-async def get_support_status(admin_id: int):
-    """Get support access status for second admin (main admin only)."""
-    admin = supabase.table("users").select("username").eq("id", admin_id).single().execute()
-    if not admin.data or admin.data['username'] != ADMIN_USERNAME:
-        raise HTTPException(403, "Access Denied")
-    
-    admin2_id = get_admin_id(ADMIN2_USERNAME)
-    if not admin2_id:
-        return {"admin2_exists": False, "support_blocked": False}
-    
-    curr = supabase.table("users").select("support_blocked").eq("id", admin2_id).single().execute()
-    return {
-        "admin2_exists": True,
-        "admin2_id": admin2_id,
-        "support_blocked": curr.data.get('support_blocked', False) if curr.data else False
-    }
 
 
 # --- API ENDPOINTS: CLIENT ---
@@ -954,15 +406,12 @@ async def get_support_status(admin_id: int):
 @app.post("/api/support")
 async def handle_support_request(req: SupportRequest):
     try:
-        # 1. Get Admin IDs
-        admin1_id = get_admin_id(ADMIN_USERNAME)
-        admin2_id = get_admin_id(ADMIN2_USERNAME)
-        
-        print(f"Admin IDs: {ADMIN_USERNAME}={admin1_id}, {ADMIN2_USERNAME}={admin2_id}")
-        
-        if not admin1_id:
-            print(f"Main admin user '{ADMIN_USERNAME}' not found in database.")
-            raise HTTPException(status_code=500, detail="Main admin not configured.")
+        # 1. Get Admin ID
+        admin_user = supabase.table("users").select("id").eq("username", ADMIN_USERNAME).single().execute()
+        if not admin_user.data:
+            print(f"Admin user '{ADMIN_USERNAME}' not found in database.")
+            raise HTTPException(status_code=500, detail="Admin user not configured.")
+        admin_id = admin_user.data['id']
 
         # 2. Get User Info
         user = supabase.table("users").select("username").eq("id", req.user_id).single().execute()
@@ -975,32 +424,14 @@ async def handle_support_request(req: SupportRequest):
             "suggestion": "предложение"
         }
         type_str = type_map.get(req.type, "сообщение")
-
+        
         message_to_admin = (
             f"⚠️ Пользователь {username} написал {type_str}:\n\n"
             f"<blockquote>{req.message}</blockquote>"
         )
 
-        # 4. Create inline keyboard with reply options
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Ответить шаблоном", callback_data=f"rt_{req.user_id}_{req.type}")],
-            [InlineKeyboardButton(text="✏️ Написать ответ", callback_data=f"rc_{req.user_id}")]
-        ])
-
-        # 5. Send message to both admins
-        sent_count = 0
-        for admin_id, admin_name in [(admin1_id, ADMIN_USERNAME), (admin2_id, ADMIN2_USERNAME)]:
-            if admin_id:
-                try:
-                    await bot.send_message(admin_id, message_to_admin, parse_mode="HTML", reply_markup=keyboard)
-                    sent_count += 1
-                    print(f"✅ Support message sent to {admin_name} (ID: {admin_id})")
-                except Exception as e:
-                    print(f"❌ Failed to send to {admin_name} (ID: {admin_id}): {e}")
-            else:
-                print(f"⚠️ {admin_name} not found in database (ID is None)")
-        
-        print(f"Support message sent to {sent_count}/2 admins from user {req.user_id}")
+        # 4. Send message to admin
+        await bot.send_message(admin_id, message_to_admin, parse_mode="HTML")
         return {"status": "ok"}
     except Exception as e:
         print(f"Error in /api/support: {e}")
@@ -1152,8 +583,6 @@ async def move_file(req: MoveRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-from datetime import datetime
-
 @app.post("/api/generate_invoice")
 async def generate_invoice(req: InvoiceRequest):
     try:
@@ -1167,32 +596,9 @@ async def generate_invoice(req: InvoiceRequest):
         )
         return {"link": link}
     except Exception as e:
-        logger.error(f"Error generating invoice: {e}")
+        print(f"Error generating invoice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/health")
-async def health_check():
-    """
-    Health check endpoint for monitoring.
-    Use this with cron-job.org or uptimerobot.com to prevent Render sleep.
-    HEAD requests are also supported automatically by FastAPI.
-    """
-    try:
-        # Check bot connection
-        bot_info = await bot.get_me()
-        bot_status = "ok"
-    except Exception as e:
-        logger.error(f"Bot health check failed: {e}")
-        bot_status = f"error: {e}"
-
-    return {
-        "status": "ok",
-        "timestamp": datetime.now().isoformat(),
-        "webhook_url": WEBHOOK_URL,
-        "bot_username": bot_info.username if bot_info else None,
-        "bot_status": bot_status
-    }
 
 @app.get("/")
 async def root():
-    return {"message": "Tg Cloud v3.0 (Backend)"}
+    return {"message": "Tg Cloud v3.0"}

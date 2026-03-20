@@ -1,9 +1,7 @@
-aiogram>=3.0.0
+aiogram
 fastapi
 uvicorn
 supabase
 python-dotenv
 python-multipart
 aiohttp
-aiohttp-socks
-postgrest

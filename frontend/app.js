@@ -3,7 +3,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 tg.headerColor = '#000000';
 
-const API_URL = "https://rusangenius-tg-cloud.hf.space"; 
+const API_URL = "https://reader-3ok7.onrender.com"; 
 const REAL_USER_ID = tg.initDataUnsafe?.user?.id; 
 let USER_ID = REAL_USER_ID;
 const BOT_USERNAME = "RusanCloudBot"; 
