@@ -1,6 +1,6 @@
 # ☁️ Tg Cloud — Your Unlimited Cloud Storage in Telegram
 
-![Tg Cloud](image.png)
+![Tg Cloud](assets/image.png)
 
 👉 **[Launch the App in Telegram](https://t.me/RusanCloudBot)**
 
@@ -22,7 +22,7 @@ Store gigabytes of photos, videos, and documents absolutely free of charge, with
     *   Adjustable grid size.
     *   Support for English and Russian languages.
 
-![Tg Cloud Screenshots](screenshots.png)
+![Tg Cloud Screenshots](assets/screenshots.png)
 
 ---
 
